@@ -7,8 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from camp_agent.db.case_record import CaseRecord
 from camp_agent.db.tables import cases
-from camp_agent.domain.case_state import CaseState
+from camp_agent.domain.case_state import LIVE_STATES, CaseState, StateReason
+from camp_agent.domain.case_status import CaseStatus
 from camp_agent.domain.scope import Scope, ScopeSource
+from camp_agent.domain.urgency import Urgency
 
 
 class CaseRepository:
@@ -21,7 +23,7 @@ class CaseRepository:
 
     async def find_open_by_token(self, case_token: str) -> CaseRecord | None:
         query = select(cases).where(
-            cases.c.case_token == case_token, cases.c.state == CaseState.OPEN
+            cases.c.case_token == case_token, cases.c.state.in_(LIVE_STATES)
         )
         row = (await self._conn.execute(query)).one_or_none()
         return None if row is None else self._record(row)
@@ -37,6 +39,20 @@ class CaseRepository:
             }
         row = (await self._conn.execute(insert(cases).values(values).returning(cases))).one()
         return self._record(row)
+
+    async def save_status(self, case_id: int, status: CaseStatus) -> None:
+        await self._conn.execute(
+            update(cases)
+            .where(cases.c.id == case_id)
+            .values(
+                state=status.state,
+                state_reason=status.reason,
+                safety=status.safety,
+                urgency=status.urgency,
+                clarify_rounds=status.clarify_rounds,
+                held_at=status.held_at,
+            )
+        )
 
     async def claim_run(self, case_id: int, owner: UUID, now: datetime, until: datetime) -> bool:
         claimed = await self._conn.execute(
@@ -66,4 +82,12 @@ class CaseRepository:
                 row.scope_stay_to,
                 ScopeSource(row.scope_source),
             )
-        return CaseRecord(row.id, row.case_token, CaseState(row.state), scope)
+        status = CaseStatus(
+            state=CaseState(row.state),
+            reason=None if row.state_reason is None else StateReason(row.state_reason),
+            safety=row.safety,
+            urgency=Urgency(row.urgency),
+            clarify_rounds=row.clarify_rounds,
+            held_at=row.held_at,
+        )
+        return CaseRecord(row.id, row.case_token, status, scope)

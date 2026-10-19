@@ -1,8 +1,13 @@
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from camp_agent.domain.audit_entry import AuditEntry
+from camp_agent.domain.case_status import CaseStatus
 from camp_agent.domain.route_guard import Category, Route
+from camp_agent.domain.scope import Scope
 from camp_agent.domain.urgency import Urgency
+from camp_agent.graph.triage_types import CaseSnapshot, StepRecord, TaskDraft
 from camp_agent.llm.llm_error import LlmError
 from camp_agent.llm.llm_types import Classification, Verdict
 
@@ -60,3 +65,25 @@ class FakeLlm:
         self.calls.append(name)
         if self._down:
             raise LlmError("down")
+
+
+class InMemoryTriageStore:
+    def __init__(self) -> None:
+        self.cases: dict[int, CaseSnapshot] = {}
+        self.tasks: list[TaskDraft] = []
+        self.audit: list[AuditEntry] = []
+
+    def add_case(self, case_id: int, scope: Scope | None = None) -> None:
+        self.cases[case_id] = CaseSnapshot(CaseStatus(), scope)
+
+    async def load(self, case_id: int) -> CaseSnapshot:
+        return self.cases[case_id]
+
+    async def commit(self, case_id: int, step: StepRecord) -> None:
+        if step.status is not None:
+            self.cases[case_id] = replace(self.cases[case_id], status=step.status)
+        self.tasks.extend(step.tasks)
+        self.audit.append(step.audit)
+
+    def status(self, case_id: int) -> CaseStatus:
+        return self.cases[case_id].status

@@ -4,20 +4,29 @@ from datetime import timedelta
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
+from pydantic_ai.models import Model
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
 from starlette.middleware.sessions import SessionMiddleware
 
 from camp_agent.clock import Clock, SystemClock
 from camp_agent.config import Settings
 from camp_agent.db.engine import make_engine
+from camp_agent.db.pg_triage_store import PgTriageStore
 from camp_agent.db.probe import DatabaseProbe
-from camp_agent.graph.stub_graph import StubGraph
+from camp_agent.domain.safety_rule import SafetyRule
+from camp_agent.graph.langgraph_triage import LangGraphTriage
 from camp_agent.graph.triage_graph import TriageGraph
+from camp_agent.graph.triage_types import TriagePolicy
 from camp_agent.http import guest, health
 from camp_agent.http.guest import GuestServices
 from camp_agent.intake.find_open_case import FindOpenCase
 from camp_agent.intake.rate_limiter import SlidingWindowLimiter
 from camp_agent.intake.run_coordinator import RunCoordinator
 from camp_agent.intake.submit_message import SubmitMessage
+from camp_agent.llm.llm_port import LlmPort
+from camp_agent.llm.pydantic_ai_llm import PydanticAiLlm
+from camp_agent.llm.retrying_llm import RetryingLlm
 from camp_agent.qr.qr_token import QrTokens
 
 
@@ -25,16 +34,25 @@ def create_app(
     settings: Settings | None = None,
     clock: Clock | None = None,
     graph: TriageGraph | None = None,
+    llm: LlmPort | None = None,
 ) -> FastAPI:
     resolved = settings or Settings()
     resolved_clock = clock or SystemClock(ZoneInfo(resolved.camp_timezone))
-    resolved_graph = graph or StubGraph()
+    safety = SafetyRule(resolved.safety_terms)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         engine = make_engine(resolved)
         limiter = SlidingWindowLimiter(
             resolved.rate_limit_messages, timedelta(seconds=resolved.rate_limit_window_s)
+        )
+        triage = graph or LangGraphTriage(
+            RetryingLlm(
+                llm or _openai_llm(resolved), resolved.llm_attempts, resolved.llm_retry_delay_s
+            ),
+            PgTriageStore(engine),
+            resolved_clock,
+            TriagePolicy(safety, frozenset(resolved.held_categories), resolved.clarify_max_rounds),
         )
         app.state.health_probe = DatabaseProbe(engine)
         app.state.guest_services = GuestServices(
@@ -44,7 +62,7 @@ def create_app(
             submit=SubmitMessage(engine, limiter, resolved_clock),
             find_open_case=FindOpenCase(engine),
             coordinator=RunCoordinator(
-                engine, resolved_graph, resolved_clock, timedelta(seconds=resolved.run_lease_s)
+                engine, triage, resolved_clock, timedelta(seconds=resolved.run_lease_s)
             ),
         )
         yield
@@ -60,3 +78,12 @@ def create_app(
     app.include_router(health.router)
     app.include_router(guest.router)
     return app
+
+
+def _openai_llm(settings: Settings) -> PydanticAiLlm:
+    # With no key the app still starts; every LLM call fails and the case is held (D16).
+    model: Model | str = f"openai:{settings.llm_model}"
+    if settings.openai_api_key is not None:
+        provider = OpenAIProvider(api_key=settings.openai_api_key.get_secret_value())
+        model = OpenAIChatModel(settings.llm_model, provider=provider)
+    return PydanticAiLlm(model, settings.llm_timeout_s)

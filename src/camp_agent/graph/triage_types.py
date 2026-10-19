@@ -1,0 +1,39 @@
+from collections.abc import Set
+from dataclasses import dataclass
+
+from camp_agent.domain.audit_entry import AuditEntry
+from camp_agent.domain.case_status import CaseStatus
+from camp_agent.domain.route_guard import Category, TaskKind, TaskState
+from camp_agent.domain.safety_rule import SafetyRule
+from camp_agent.domain.scope import Scope
+from camp_agent.domain.urgency import Urgency
+
+
+@dataclass(frozen=True)
+class CaseSnapshot:
+    status: CaseStatus
+    scope: Scope | None
+
+
+@dataclass(frozen=True)
+class TaskDraft:
+    step_id: str
+    kind: TaskKind
+    category: Category | None
+    urgency: Urgency
+    state: TaskState
+    summary: str
+
+
+@dataclass(frozen=True)
+class StepRecord:
+    audit: AuditEntry
+    status: CaseStatus | None = None
+    tasks: tuple[TaskDraft, ...] = ()
+
+
+@dataclass(frozen=True)
+class TriagePolicy:
+    safety: SafetyRule
+    held_categories: Set[str]
+    clarify_max_rounds: int

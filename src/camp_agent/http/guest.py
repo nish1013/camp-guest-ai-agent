@@ -102,7 +102,9 @@ async def submit_message(
     if not result.replayed:
         background.add_task(services.coordinator.drive, result.case.id)
     response = templates.TemplateResponse(
-        request, "_case.html", {"case": _view(result.case), "next_key": uuid4()}
+        request,
+        "_case.html",
+        {"case": _view(result.case, services.settings), "next_key": uuid4()},
     )
     response.set_cookie(
         CASE_COOKIE,
@@ -125,7 +127,7 @@ async def _page(request: Request, services: GuestServices) -> HTMLResponse:
         "index.html",
         {
             "scope": _scope(request, services),
-            "case": None if case is None else _view(case),
+            "case": None if case is None else _view(case, services.settings),
             "next_key": uuid4(),
         },
     )
@@ -138,5 +140,8 @@ def _scope(request: Request, services: GuestServices) -> Scope | None:
     return services.qr_tokens.read(token, services.clock.today()).scope
 
 
-def _view(case: CaseRecord) -> CaseView:
-    return CaseView(link=f"/c/{case.case_token}", status=guest_status(case.state))
+def _view(case: CaseRecord, settings: Settings) -> CaseView:
+    return CaseView(
+        link=f"/c/{case.case_token}",
+        status=guest_status(case.status, settings.emergency_guidance),
+    )

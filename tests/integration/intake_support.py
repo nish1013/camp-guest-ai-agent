@@ -25,3 +25,12 @@ def count(db: Engine, table: str) -> int:
     with db.connect() as conn:
         found: int = conn.execute(text(f"SELECT count(*) FROM {table}")).scalar_one()
     return found
+
+
+def rows(db: Engine, query: str) -> list[tuple[object, ...]]:
+    with db.connect() as conn:
+        return [tuple(row) for row in conn.execute(text(query))]
+
+
+def audit(db: Engine) -> list[tuple[object, ...]]:
+    return rows(db, "SELECT step, decision FROM audit_entries ORDER BY id")

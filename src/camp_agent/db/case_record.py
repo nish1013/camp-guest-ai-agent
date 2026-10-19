@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from camp_agent.domain.case_state import CaseState
+from camp_agent.domain.case_status import CaseStatus
 from camp_agent.domain.scope import Scope
 
 
@@ -8,5 +8,5 @@ from camp_agent.domain.scope import Scope
 class CaseRecord:
     id: int
     case_token: str
-    state: CaseState
+    status: CaseStatus
     scope: Scope | None

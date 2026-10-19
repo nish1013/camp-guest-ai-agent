@@ -10,7 +10,7 @@ from testcontainers.community.postgres import PostgresContainer
 
 from camp_agent.app import create_app
 from camp_agent.config import Settings
-from tests.fakes import FakeClock, oct_19
+from tests.fakes import FakeClock, FakeLlm, oct_19
 from tests.integration.intake_support import SECRET, RecordingGraph
 
 
@@ -60,4 +60,18 @@ def client(
 ) -> Iterator[TestClient]:
     settings = Settings(database_url=migrated_url, secret_key=SECRET)
     with TestClient(create_app(settings, clock=clock, graph=graph)) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def llm() -> FakeLlm:
+    return FakeLlm()
+
+
+@pytest.fixture
+def triage_client(
+    db: Engine, migrated_url: str, llm: FakeLlm, clock: FakeClock
+) -> Iterator[TestClient]:
+    settings = Settings(database_url=migrated_url, secret_key=SECRET, llm_retry_delay_s=0)
+    with TestClient(create_app(settings, clock=clock, llm=llm)) as test_client:
         yield test_client

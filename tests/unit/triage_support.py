@@ -1,0 +1,45 @@
+from datetime import date
+
+from camp_agent.config import Settings
+from camp_agent.domain.route_guard import Category, Route
+from camp_agent.domain.safety_rule import SafetyRule
+from camp_agent.domain.scope import Scope, ScopeSource
+from camp_agent.domain.urgency import Urgency
+from camp_agent.graph.langgraph_triage import LangGraphTriage
+from camp_agent.graph.triage_graph import PendingMessage
+from camp_agent.graph.triage_types import TriagePolicy
+from camp_agent.llm.llm_types import Classification
+from tests.fakes import FakeLlm, InMemoryTriageStore, oct_19
+
+DEFAULTS = Settings()
+C12 = Scope("C12", date(2026, 10, 18), date(2026, 10, 25), ScopeSource.QR)
+POLICY = TriagePolicy(
+    SafetyRule(DEFAULTS.safety_terms),
+    frozenset(DEFAULTS.held_categories),
+    DEFAULTS.clarify_max_rounds,
+)
+CASE = 1
+
+
+def proposal(category: Category, route: Route, urgency: Urgency) -> Classification:
+    return Classification(category=category, route=route, urgency=urgency)
+
+
+def new_store(scope: Scope | None = C12) -> InMemoryTriageStore:
+    store = InMemoryTriageStore()
+    store.add_case(CASE, scope)
+    return store
+
+
+async def triage(
+    llm: FakeLlm, *texts: str, store: InMemoryTriageStore | None = None
+) -> InMemoryTriageStore:
+    store = store or new_store()
+    graph = LangGraphTriage(llm, store, oct_19(), POLICY)
+    for i, text in enumerate(texts, start=1):
+        await graph.run(CASE, [PendingMessage(i, text)])
+    return store
+
+
+def steps(store: InMemoryTriageStore) -> list[str]:
+    return [f"{entry.step}:{entry.decision}" for entry in store.audit]
