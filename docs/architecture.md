@@ -45,7 +45,8 @@ flowchart LR
 
 ## Triage graph
 
-Code decides and the LLM proposes (D24). Every step commits one aggregate and writes one audit entry.
+Code decides and the LLM proposes (D24). Every step commits one aggregate. A Case step writes one
+audit entry; the report step's record is the report row (plan-deviations D11).
 
 ```mermaid
 flowchart TD
@@ -55,20 +56,20 @@ flowchart TD
   Verify -- spam --> Park["park"]
   Verify -- unclear --> Clarify["clarify, max 2<br/>then hold"]
   Verify -- genuine --> Split["split intents (LLM)"]
-  Split --> Confirm{"2+ faults,<br/>none urgent?"}
-  Confirm -- yes --> AskSplit["guest confirms split<br/>(interrupt)"] --> Classify
-  Confirm -- no --> Classify["per task: classify (LLM)"]
+  Split --> Classify["per task: classify (LLM)"]
   Classify --> Guard{"route guard (code)<br/>D36 list, scope?"}
   Guard -- money --> Hold["hold for human"]
   Guard -- no scope --> StepUp["step-up form<br/>(task waits for scope)"] --> Guard
   Guard -- question --> Answer["guide answer (LLM)<br/>citation check (code)"]
-  Guard -- fault --> Report["save report<br/>(cabin lock, I4)"] --> Same{"same as an open<br/>report? (LLM)"}
-  Same -- maybe --> AskSame["guest confirms<br/>(interrupt)"] --> Link["link ticket"]
+  Guard -- fault --> Confirm{"2+ faults,<br/>none urgent?"}
+  Confirm -- yes --> AskSplit["guest confirms split<br/>(task waits for the answer)"] --> Report
+  Confirm -- no --> Report["save report<br/>(cabin lock, I4)"] --> Same{"same as an open<br/>report? (LLM)"}
+  Same -- maybe --> AskSame["guest confirms<br/>(task waits for the answer)"] --> Link["link ticket"]
   Same -- different --> Args["specialist args (LLM)"]
   AskSame -- no --> Args
   Args --> Validate{"validate (code)<br/>schema, tool, scope"}
   Validate -- pass --> Ticket["TicketPort.create<br/>key: case + step"]
-  Validate -- block --> Reprompt["reprompt once,<br/>then clarify or hold"]
+  Validate -- block --> Reprompt["reprompt once,<br/>then hold"]
   Guard -- table --> Booking["restaurant args (LLM)<br/>validate, booking request"]
 ```
 
