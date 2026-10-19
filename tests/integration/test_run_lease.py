@@ -25,6 +25,9 @@ class GatedGraph:
         self.entered = anyio.Event()
         self.gate = anyio.Event()
 
+    async def resume(self, case_id: int) -> None:
+        pass
+
     async def run(self, case_id: int, batch: list[PendingMessage]) -> None:
         self.active += 1
         self.max_active = max(self.max_active, self.active)

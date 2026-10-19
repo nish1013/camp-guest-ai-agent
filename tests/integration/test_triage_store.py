@@ -12,7 +12,8 @@ from camp_agent.domain.case_state import CaseState, StateReason
 from camp_agent.domain.case_status import CaseStatus
 from camp_agent.domain.route_guard import TaskKind, TaskState
 from camp_agent.domain.urgency import Urgency
-from camp_agent.graph.triage_types import StepRecord, TaskDraft
+from camp_agent.graph.stale_case_error import StaleCaseError
+from camp_agent.graph.triage_types import StatusChange, StepRecord, TaskDraft
 from tests.fakes import oct_19
 from tests.integration.intake_support import count
 
@@ -35,7 +36,7 @@ async def test_i13_step_saves_audit_with_change(db: Engine, async_db: AsyncEngin
     case_id = new_case(db)
     held = CaseStatus().hold(StateReason.MONEY, oct_19().now())
 
-    await store.commit(case_id, StepRecord(GUARD, held, (TASK,)))
+    await store.commit(case_id, StepRecord(GUARD, StatusChange(held, 0), (TASK,)))
 
     assert (await store.load(case_id)).status == held
     assert (count(db, "tasks"), count(db, "audit_entries")) == (1, 1)
@@ -48,7 +49,7 @@ async def test_i13_failed_step_leaves_no_audit(db: Engine, async_db: AsyncEngine
     bad = replace(TASK, kind=cast(TaskKind, "refund"))
 
     with pytest.raises(IntegrityError, match="ck_tasks_kind"):
-        await store.commit(case_id, StepRecord(GUARD, held, (bad,)))
+        await store.commit(case_id, StepRecord(GUARD, StatusChange(held, 0), (bad,)))
 
     assert (await store.load(case_id)).status.state is CaseState.OPEN
     assert (count(db, "tasks"), count(db, "audit_entries")) == (0, 0)
@@ -62,3 +63,17 @@ async def test_i3_rerun_step_keeps_one_task(db: Engine, async_db: AsyncEngine) -
     await store.commit(case_id, StepRecord(GUARD, tasks=(TASK,)))
 
     assert count(db, "tasks") == 1
+
+
+async def test_i10_stale_status_rejected(db: Engine, async_db: AsyncEngine) -> None:
+    store = PgTriageStore(async_db)
+    case_id = new_case(db)
+    held = CaseStatus().hold(StateReason.MONEY, oct_19().now())
+    await store.commit(case_id, StepRecord(GUARD, StatusChange(held, 0)))
+
+    with pytest.raises(StaleCaseError):
+        await store.commit(case_id, StepRecord(GUARD, StatusChange(CaseStatus(), 0)))
+
+    case = await store.load(case_id)
+    assert (case.status, case.version) == (held, 1)
+    assert count(db, "audit_entries") == 1

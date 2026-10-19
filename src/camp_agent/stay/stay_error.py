@@ -1,0 +1,2 @@
+class StayError(Exception):
+    pass

@@ -10,7 +10,15 @@ from testcontainers.community.postgres import PostgresContainer
 
 from camp_agent.app import create_app
 from camp_agent.config import Settings
-from tests.fakes import FakeClock, FakeLlm, SwitchableGuide, demo_guide, oct_19
+from tests.fakes import (
+    FakeClock,
+    FakeLlm,
+    SwitchableGuide,
+    SwitchableStays,
+    demo_guide,
+    demo_stays,
+    oct_19,
+)
 from tests.integration.intake_support import SECRET, RecordingGraph
 
 
@@ -32,7 +40,9 @@ def migrated_url(database_url: str) -> str:
 def db(migrated_url: str) -> Iterator[Engine]:
     engine = create_engine(migrated_url)
     with engine.begin() as conn:
-        conn.execute(text("TRUNCATE messages, cases RESTART IDENTITY CASCADE"))
+        conn.execute(
+            text("TRUNCATE messages, cases, ip_verification_failures RESTART IDENTITY CASCADE")
+        )
     yield engine
     engine.dispose()
 
@@ -55,16 +65,27 @@ def guide() -> SwitchableGuide:
 
 
 @pytest.fixture
+def stays() -> SwitchableStays:
+    return demo_stays()
+
+
+@pytest.fixture
 def clock() -> FakeClock:
     return oct_19()
 
 
 @pytest.fixture
 def client(
-    db: Engine, migrated_url: str, graph: RecordingGraph, clock: FakeClock, guide: SwitchableGuide
+    db: Engine,
+    migrated_url: str,
+    graph: RecordingGraph,
+    clock: FakeClock,
+    guide: SwitchableGuide,
+    stays: SwitchableStays,
 ) -> Iterator[TestClient]:
     settings = Settings(database_url=migrated_url, secret_key=SECRET)
-    with TestClient(create_app(settings, clock=clock, graph=graph, guide=guide)) as test_client:
+    app = create_app(settings, clock=clock, graph=graph, guide=guide, stays=stays)
+    with TestClient(app) as test_client:
         yield test_client
 
 
@@ -75,8 +96,14 @@ def llm() -> FakeLlm:
 
 @pytest.fixture
 def triage_client(
-    db: Engine, migrated_url: str, llm: FakeLlm, clock: FakeClock, guide: SwitchableGuide
+    db: Engine,
+    migrated_url: str,
+    llm: FakeLlm,
+    clock: FakeClock,
+    guide: SwitchableGuide,
+    stays: SwitchableStays,
 ) -> Iterator[TestClient]:
     settings = Settings(database_url=migrated_url, secret_key=SECRET, llm_retry_delay_s=0)
-    with TestClient(create_app(settings, clock=clock, llm=llm, guide=guide)) as test_client:
+    app = create_app(settings, clock=clock, llm=llm, guide=guide, stays=stays)
+    with TestClient(app) as test_client:
         yield test_client

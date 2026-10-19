@@ -44,3 +44,25 @@ Plan:     Storage: `tasks` has "case_id, step_id, kind, urgency, ..., state". No
 Built:    `tasks` also has `answer` and `answer_section`, and a `done` state. A `CHECK` allows an answer only on a question task in state `done`.
 Why:      the answer text is written by the LLM (decisions.md, "Guide answer text"), so it cannot be derived on read like a status template. The guest page must show the answer and the section it cites (US3). A question is one task (D14), so its answer belongs on that task's row.
 Undo:     drop the two columns and the `done` state in a migration; keep answers in a table of their own keyed by `(case_id, step_id)`.
+
+## D7. A task waiting for scope is saved, not a graph interrupt (PR 5, 2026-10-19)
+
+Plan:     Request and graph flow: "no scope -> step-up form (interrupt)". The run pauses at the route guard and resumes there after the step-up.
+Built:    the route guard saves a fault or table task with no scope as `awaiting_scope`, and the run goes on to the next intent. The case page shows the form while such a task waits. A match sets the scope; the next run under the run lease (I2) puts each waiting task through the route guard again. No LLM call is repeated.
+Why:      an interrupt pauses the whole run, so a question in the same message waits behind the form. If the step-up then ends in a park, the question is never answered, while US3 answers any question with no scope and D14 routes each task on its own. The waiting task is already saved with its audit entry in one step (I13), so the wait survives a restart with no checkpoint.
+Undo:     call `interrupt()` in the route guard for a task with no scope, add the LangGraph Postgres checkpointer, and resume the thread from `POST /c/{case_token}/step-up`.
+
+## D8. A hyphen in the booking ref is ignored like a space (PR 5, 2026-10-19)
+
+Plan:     decisions.md D2: "Ref compare is exact with spaces removed."
+Built:    spaces and hyphens are removed from both refs, then the two are compared exactly. Letter case is kept.
+Why:      US7 expects "BK 48213" to match `BK-48213`. With only spaces removed, `BK48213` never equals `BK-48213`. A hyphen carries no part of the ref.
+Undo:     drop `-` from `_REF_SEPARATORS` in `domain/step_up.py`; the US7 example then needs the hyphen typed.
+
+## D9. A safety case is not parked after 3 failed step-ups (PR 5, 2026-10-19)
+
+Plan:     I10: "A case with 3 failed verifications is parked, unless staff restored it."
+Built:    the 3rd failure parks the case, held work included. A case flagged safety stays held. On any case with 3 failures the form is hidden and a further attempt is refused without a booking lookup.
+Why:      I9 says a safety case is never parked, and D8 puts safety first. The stored failure count, not the park, is what stops further guessing, so the limit still holds on a safety case.
+Undo:     none needed in code; I10 in domain.md would read "unless staff restored it or it is flagged safety".
+Closed:   PR 5, 2026-10-19. I10 in domain.md now reads "unless staff restored it or it is flagged safety".

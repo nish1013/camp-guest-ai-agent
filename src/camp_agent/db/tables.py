@@ -73,3 +73,20 @@ audit_entries = Table(
     Column("detail", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
+
+verification_attempts = Table(
+    "verification_attempts",
+    metadata,
+    Column("id", BigInteger, primary_key=True),
+    Column("case_id", BigInteger, ForeignKey("cases.id"), nullable=False),
+    Column("outcome", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
+
+ip_verification_failures = Table(
+    "ip_verification_failures",
+    metadata,
+    Column("id", BigInteger, primary_key=True),
+    Column("ip", Text, nullable=False),
+    Column("failed_at", DateTime(timezone=True), nullable=False),
+)

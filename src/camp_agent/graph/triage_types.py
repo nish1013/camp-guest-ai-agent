@@ -10,9 +10,19 @@ from camp_agent.domain.urgency import Urgency
 
 
 @dataclass(frozen=True)
+class StatusChange:
+    status: CaseStatus
+    version: int
+
+
+@dataclass(frozen=True)
 class CaseSnapshot:
     status: CaseStatus
     scope: Scope | None
+    version: int
+
+    def change(self, status: CaseStatus) -> StatusChange:
+        return StatusChange(status, self.version)
 
 
 @dataclass(frozen=True)
@@ -33,11 +43,25 @@ class TaskAnswer:
 
 
 @dataclass(frozen=True)
+class WaitingTask:
+    step_id: str
+    kind: TaskKind
+    category: Category
+
+
+@dataclass(frozen=True)
+class TaskTransition:
+    step_id: str
+    state: TaskState
+
+
+@dataclass(frozen=True)
 class StepRecord:
     audit: AuditEntry
-    status: CaseStatus | None = None
+    status: StatusChange | None = None
     tasks: tuple[TaskDraft, ...] = ()
     answers: tuple[TaskAnswer, ...] = ()
+    resumed: tuple[TaskTransition, ...] = ()
 
 
 @dataclass(frozen=True)

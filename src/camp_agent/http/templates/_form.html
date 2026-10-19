@@ -1,6 +1,10 @@
 <form id="message-form" hx-post="/messages" hx-target="#case"{% if oob %} hx-swap-oob="true"{% endif %}>
   <label for="text">How can we help?</label>
   <textarea id="text" name="text" required maxlength="2000"></textarea>
+  {% if not scope %}
+  <label for="cabin_hint">Cabin or pitch (optional)</label>
+  <input id="cabin_hint" name="cabin_hint" maxlength="16">
+  {% endif %}
   <input type="hidden" name="idempotency_key" value="{{ next_key }}">
   <button type="submit">Send</button>
 </form>

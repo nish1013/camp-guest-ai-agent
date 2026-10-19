@@ -60,7 +60,7 @@ flowchart TD
   Confirm -- no --> Classify["per task: classify (LLM)"]
   Classify --> Guard{"route guard (code)<br/>D36 list, scope?"}
   Guard -- money --> Hold["hold for human"]
-  Guard -- no scope --> StepUp["step-up form<br/>(interrupt)"] --> Guard
+  Guard -- no scope --> StepUp["step-up form<br/>(task waits for scope)"] --> Guard
   Guard -- question --> Answer["guide answer (LLM)<br/>citation check (code)"]
   Guard -- fault --> Report["save report<br/>(cabin lock, I4)"] --> Same{"same as an open<br/>report? (LLM)"}
   Same -- maybe --> AskSame["guest confirms<br/>(interrupt)"] --> Link["link ticket"]

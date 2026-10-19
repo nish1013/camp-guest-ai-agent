@@ -40,19 +40,34 @@ class CaseRepository:
         row = (await self._conn.execute(insert(cases).values(values).returning(cases))).one()
         return self._record(row)
 
-    async def save_status(self, case_id: int, status: CaseStatus) -> None:
-        await self._conn.execute(
-            update(cases)
-            .where(cases.c.id == case_id)
-            .values(
-                state=status.state,
-                state_reason=status.reason,
-                safety=status.safety,
-                urgency=status.urgency,
-                clarify_rounds=status.clarify_rounds,
-                held_at=status.held_at,
-            )
+    async def save_status(self, case_id: int, status: CaseStatus, version: int) -> bool:
+        return await self._update_at_version(
+            case_id,
+            version,
+            {
+                "state": status.state,
+                "state_reason": status.reason,
+                "safety": status.safety,
+                "urgency": status.urgency,
+                "clarify_rounds": status.clarify_rounds,
+                "held_at": status.held_at,
+            },
         )
+
+    async def set_scope(self, case_id: int, scope: Scope, version: int) -> bool:
+        return await self._update_at_version(
+            case_id,
+            version,
+            {
+                "scope_cabin": scope.cabin,
+                "scope_stay_from": scope.stay_from,
+                "scope_stay_to": scope.stay_to,
+                "scope_source": scope.source,
+            },
+        )
+
+    async def bump_version(self, case_id: int, version: int) -> bool:
+        return await self._update_at_version(case_id, version, {})
 
     async def claim_run(self, case_id: int, owner: UUID, now: datetime, until: datetime) -> bool:
         claimed = await self._conn.execute(
@@ -73,6 +88,15 @@ class CaseRepository:
             .values(run_lease_owner=None, run_lease_until=None)
         )
 
+    async def _update_at_version(self, case_id: int, version: int, values: dict[str, Any]) -> bool:
+        updated = await self._conn.execute(
+            update(cases)
+            .where(cases.c.id == case_id, cases.c.version == version)
+            .values(**values, version=cases.c.version + 1)
+            .returning(cases.c.id)
+        )
+        return updated.one_or_none() is not None
+
     def _record(self, row: Row[Any]) -> CaseRecord:
         scope = None
         if row.scope_cabin is not None:
@@ -90,4 +114,4 @@ class CaseRepository:
             clarify_rounds=row.clarify_rounds,
             held_at=row.held_at,
         )
-        return CaseRecord(row.id, row.case_token, status, scope)
+        return CaseRecord(row.id, row.case_token, status, scope, row.version)

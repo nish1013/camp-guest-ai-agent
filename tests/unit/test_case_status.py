@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 from camp_agent.domain.case_state import CaseState, StateReason
 from camp_agent.domain.case_status import CaseStatus
+from camp_agent.domain.guest_status import NOT_VERIFIED, guest_status
 from camp_agent.domain.urgency import Urgency
 
 T0 = datetime(2026, 10, 19, 14, tzinfo=UTC)
@@ -54,3 +55,31 @@ def test_d8_llm_never_lowers_urgency() -> None:
     status = CaseStatus().emergency(T0).raise_urgency(Urgency.CAN_WAIT)
 
     assert status.urgency is Urgency.URGENT
+
+
+def test_i10_hold_keeps_park() -> None:
+    parked = CaseStatus().park_unverified()
+
+    assert parked.hold(StateReason.MONEY, T0) == parked
+
+
+def test_i10_failed_step_up_parks_held() -> None:
+    status = CaseStatus().hold(StateReason.MONEY, T0).park_unverified()
+
+    assert (status.state, status.reason, status.held_at) == (
+        CaseState.PARKED,
+        StateReason.VERIFICATION,
+        None,
+    )
+
+
+def test_i9_failed_step_up_keeps_safety_held() -> None:
+    status = CaseStatus().emergency(T0)
+
+    assert status.park_unverified() == status
+
+
+def test_us7_parked_unverified_shows_reception() -> None:
+    status = CaseStatus().park_unverified()
+
+    assert guest_status(status, "Call 999.", "Call 01632.") == f"{NOT_VERIFIED} Call 01632."

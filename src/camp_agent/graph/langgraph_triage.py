@@ -2,17 +2,26 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import RetryPolicy
 
 from camp_agent.clock import Clock
 from camp_agent.domain.audit_entry import AuditEntry, AuditValue
 from camp_agent.domain.case_state import CaseState, StateReason
-from camp_agent.domain.case_status import CaseStatus
-from camp_agent.domain.route_guard import TaskKind, TaskState, guard_route
+from camp_agent.domain.route_guard import Route, TaskKind, TaskState, guard_route
+from camp_agent.domain.step_up import resumes_waiting
 from camp_agent.domain.urgency import Urgency
 from camp_agent.graph.guide_answerer import GuideAnswerer
+from camp_agent.graph.stale_case_error import StaleCaseError
 from camp_agent.graph.triage_graph import PendingMessage
 from camp_agent.graph.triage_store import TriageStore
-from camp_agent.graph.triage_types import StepRecord, TaskAnswer, TaskDraft, TriagePolicy
+from camp_agent.graph.triage_types import (
+    StatusChange,
+    StepRecord,
+    TaskAnswer,
+    TaskDraft,
+    TaskTransition,
+    TriagePolicy,
+)
 from camp_agent.llm.llm_error import LlmError
 from camp_agent.llm.llm_port import LlmPort
 from camp_agent.llm.llm_types import Classification, Verdict
@@ -49,6 +58,8 @@ LLM_FAILED = "llm_failed"
 
 _AFTER_VERDICT = {Verdict.GENUINE: SPLIT, Verdict.SPAM: PARK, Verdict.UNCLEAR: CLARIFY}
 _RECURSION_LIMIT = 1000
+# A step-up or staff action changed the case between a node's read and its write: read again.
+_STALE_RETRY = RetryPolicy(initial_interval=0.01, max_attempts=5, retry_on=StaleCaseError)
 
 
 class LangGraphTriage:
@@ -80,6 +91,27 @@ class LangGraphTriage:
         }
         await self._graph.ainvoke(start, {"recursion_limit": _RECURSION_LIMIT})
 
+    async def resume(self, case_id: int) -> None:
+        case = await self._store.load(case_id)
+        if case.scope is None or not resumes_waiting(case.status, case.scope):
+            return
+        for task in await self._store.awaiting_scope(case_id):
+            decision = guard_route(
+                task.category, Route(task.kind.value), True, self._policy.held_categories
+            )
+            detail: dict[str, AuditValue] = {
+                "step_id": task.step_id,
+                "state": decision.state,
+                "scope": case.scope.source,
+            }
+            await self._store.commit(
+                case_id,
+                StepRecord(
+                    AuditEntry(ROUTE_GUARD, decision.kind, detail),
+                    resumed=(TaskTransition(task.step_id, decision.state),),
+                ),
+            )
+
     async def _safety(self, state: TriageState) -> TriageUpdate:
         case = await self._store.load(state["case_id"])
         terms = self._policy.safety.hits(state["text"])
@@ -95,7 +127,7 @@ class LangGraphTriage:
             await self._commit(
                 state,
                 AuditEntry(SAFETY, "emergency", {"input": state["text"], "terms": terms}),
-                status=case.status.emergency(self._clock.now()),
+                status=case.change(case.status.emergency(self._clock.now())),
                 tasks=(task,),
             )
             return {"next": END}
@@ -110,16 +142,17 @@ class LangGraphTriage:
             verdict = await self._llm.verify(state["text"])
         except LlmError:
             return {"next": LLM_FAILED, "failed_step": VERIFY}
-        status = None
+        change = None
         if verdict is Verdict.GENUINE:
-            status = (await self._store.load(state["case_id"])).status.understood()
-        await self._commit(state, AuditEntry(VERIFY, verdict, {"input": state["text"]}), status)
+            case = await self._store.load(state["case_id"])
+            change = case.change(case.status.understood())
+        await self._commit(state, AuditEntry(VERIFY, verdict, {"input": state["text"]}), change)
         return {"next": _AFTER_VERDICT[verdict]}
 
     async def _park(self, state: TriageState) -> TriageUpdate:
         case = await self._store.load(state["case_id"])
         status = case.status.park(StateReason.SPAM)
-        await self._commit(state, AuditEntry(PARK, status.state), status)
+        await self._commit(state, AuditEntry(PARK, status.state), case.change(status))
         return {"next": END}
 
     async def _clarify(self, state: TriageState) -> TriageUpdate:
@@ -127,7 +160,7 @@ class LangGraphTriage:
         status = case.status.clarify(self._policy.clarify_max_rounds, self._clock.now())
         decision = "asked" if status.state is CaseState.OPEN else status.state
         audit = AuditEntry(CLARIFY, decision, {"round": status.clarify_rounds})
-        await self._commit(state, audit, status)
+        await self._commit(state, audit, case.change(status))
         return {"next": END}
 
     async def _split(self, state: TriageState) -> TriageUpdate:
@@ -178,7 +211,8 @@ class LangGraphTriage:
         if decision.state is TaskState.HELD:
             status = status.hold(StateReason.MONEY, self._clock.now())
         detail: dict[str, AuditValue] = {"step_id": step_id, "state": decision.state}
-        await self._commit(state, AuditEntry(ROUTE_GUARD, decision.kind, detail), status, (task,))
+        audit = AuditEntry(ROUTE_GUARD, decision.kind, detail)
+        await self._commit(state, audit, case.change(status), (task,))
         if decision.kind is TaskKind.QUESTION:
             return {"next": ANSWER}
         return _next_intent(state)
@@ -200,14 +234,14 @@ class LangGraphTriage:
         case = await self._store.load(state["case_id"])
         status = case.status.hold(StateReason.LLM_FAILED, self._clock.now())
         audit = AuditEntry(LLM_FAILED, status.state, {"failed_step": state["failed_step"]})
-        await self._commit(state, audit, status)
+        await self._commit(state, audit, case.change(status))
         return {"next": END}
 
     async def _commit(
         self,
         state: TriageState,
         audit: AuditEntry,
-        status: CaseStatus | None = None,
+        status: StatusChange | None = None,
         tasks: tuple[TaskDraft, ...] = (),
         answers: tuple[TaskAnswer, ...] = (),
     ) -> None:
@@ -227,7 +261,7 @@ class LangGraphTriage:
             LLM_FAILED: self._llm_failed,
         }
         for name, node in nodes.items():
-            builder.add_node(name, node)
+            builder.add_node(name, node, retry_policy=_STALE_RETRY)
             builder.add_conditional_edges(name, _next_node, [*nodes, END])
         builder.add_edge(START, SAFETY)
         return builder.compile()
