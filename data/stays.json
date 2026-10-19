@@ -3,21 +3,21 @@
     "booking_ref": "BK-48213",
     "surname": "Müller",
     "cabin": "C12",
-    "stay_from": "2026-10-18",
-    "stay_to": "2026-10-25"
+    "from_day": -1,
+    "to_day": 6
   },
   {
     "booking_ref": "BK-51107",
     "surname": "Okafor",
     "cabin": "C14",
-    "stay_from": "2026-10-17",
-    "stay_to": "2026-10-24"
+    "from_day": -2,
+    "to_day": 5
   },
   {
     "booking_ref": "BK-39950",
     "surname": "Jones",
     "cabin": "C12",
-    "stay_from": "2026-10-10",
-    "stay_to": "2026-10-17"
+    "from_day": -9,
+    "to_day": -2
   }
 ]

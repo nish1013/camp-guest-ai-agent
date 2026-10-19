@@ -3,6 +3,7 @@ from datetime import date
 import pytest
 
 from camp_agent.domain.scope import Scope, ScopeSource
+from camp_agent.qr.qr_link import demo_link
 from camp_agent.qr.qr_token import QrOutcome, QrTokens
 
 TOKENS = QrTokens("test-secret")
@@ -58,3 +59,11 @@ def test_us1_signed_bad_payload_invalid() -> None:
 
     assert TOKENS.read(reversed_stay, date(2026, 10, 19)).outcome is QrOutcome.INVALID
     assert TOKENS.read(missing_cabin, date(2026, 10, 19)).outcome is QrOutcome.INVALID
+
+
+def test_us1_demo_link_scopes_cabin_from_today() -> None:
+    link = demo_link(TOKENS, "http://localhost:8000/", "C12", date(2026, 10, 19), 6)
+
+    assert link.startswith("http://localhost:8000/q/")
+    reading = TOKENS.read(link.rsplit("/", 1)[1], date(2026, 10, 19))
+    assert reading.scope == Scope("C12", date(2026, 10, 19), date(2026, 10, 25), ScopeSource.QR)

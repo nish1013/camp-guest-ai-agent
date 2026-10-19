@@ -158,3 +158,19 @@ Plan:     Storage: `messages` has "idempotency_key unique, case_id, masked text"
 Built:    `messages` also has `pick`, with a `CHECK` on the five values. `SubmitMessage` keeps the pick only when the message opens a case; a message that joins or reopens a case stores none. A run passes the batch's pick to classify, and the classify audit entry holds `pick` beside `category`.
 Why:      the pick is chosen with the message and must survive until a run takes it, which may be after a restart (D6). D51 offers picks to a new request only, and the server decides that, not the form.
 Undo:     drop the column in a migration; the pick then reaches the run in memory and is lost on a restart.
+
+## D23. Seed bookings count days from today (PR 11, 2026-10-19)
+
+In short: the demo bookings move with the run date, so step-up works on any day.
+Plan:     PR 5: "`StayContextPort` demo with seed stays". `data/stays.json` held fixed dates, 2026-10-18 to 2026-10-25 for `BK-48213`.
+Built:    each seed holds `from_day` and `to_day`, a count of days from today in the camp time zone. `SeedStays` takes the clock and makes the dates on each lookup. Tests use the fixed clock of 2026-10-19, so they see the same dates as before.
+Why:      the step-up check refuses a stay that does not include today (`check_booking`). With fixed dates, the walk-through step-up fails from 2026-10-26, and a clean clone then needs an edit of `data/stays.json`.
+Undo:     put fixed `stay_from` and `stay_to` back in `data/stays.json` and remove the clock from `SeedStays`.
+
+## D24. A command prints the QR link of a cabin (PR 11, 2026-10-19)
+
+In short: the demo gets its cabin QR link from one command, with no code to write.
+Plan:     Endpoints: `GET /q/{qr_token}` reads a signed token. The plan names no way to issue a token.
+Built:    `python -m camp_agent.qr C12` prints `http://localhost:8000/q/<token>`, signed with `SECRET_KEY`, for a stay from today for 6 nights. The walk-through runs it with `docker compose exec api`. No HTTP endpoint issues tokens.
+Why:      `QrTokens.issue` was called only from tests, so a clean clone had no QR link to open. An endpoint that issues tokens would let any visitor give themselves a cabin scope.
+Undo:     delete `src/camp_agent/qr/__main__.py` and `qr_link.py`, and issue the token in the README with a Python one-line command.
