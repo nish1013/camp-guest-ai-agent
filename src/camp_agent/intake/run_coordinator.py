@@ -1,0 +1,56 @@
+from datetime import timedelta
+from uuid import UUID, uuid4
+
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+from camp_agent.clock import Clock
+from camp_agent.db.case_repository import CaseRepository
+from camp_agent.db.message_repository import MessageRepository
+from camp_agent.graph.triage_graph import TriageGraph
+
+
+class RunCoordinator:
+    def __init__(
+        self, engine: AsyncEngine, graph: TriageGraph, clock: Clock, lease: timedelta
+    ) -> None:
+        self._engine = engine
+        self._graph = graph
+        self._clock = clock
+        self._lease = lease
+
+    async def drive(self, case_id: int) -> None:
+        owner = uuid4()
+        while await self._claim(case_id, owner):
+            try:
+                await self._run_pending(case_id)
+            finally:
+                await self._release(case_id, owner)
+            # A message saved while this run held the lease found the case busy and did not start
+            # a run of its own, so it is picked up here.
+            if not await self._has_pending(case_id):
+                return
+
+    async def _run_pending(self, case_id: int) -> None:
+        while True:
+            async with self._engine.connect() as conn:
+                batch = await MessageRepository(conn).pending(case_id)
+            if not batch:
+                return
+            await self._graph.run(case_id, batch)
+            async with self._engine.begin() as conn:
+                await MessageRepository(conn).mark_handled(
+                    [message.id for message in batch], self._clock.now()
+                )
+
+    async def _claim(self, case_id: int, owner: UUID) -> bool:
+        now = self._clock.now()
+        async with self._engine.begin() as conn:
+            return await CaseRepository(conn).claim_run(case_id, owner, now, now + self._lease)
+
+    async def _release(self, case_id: int, owner: UUID) -> None:
+        async with self._engine.begin() as conn:
+            await CaseRepository(conn).release_run(case_id, owner)
+
+    async def _has_pending(self, case_id: int) -> bool:
+        async with self._engine.connect() as conn:
+            return await MessageRepository(conn).has_pending(case_id)
