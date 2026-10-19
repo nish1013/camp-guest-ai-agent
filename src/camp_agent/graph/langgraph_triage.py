@@ -6,6 +6,7 @@ from langgraph.types import RetryPolicy
 
 from camp_agent.clock import Clock
 from camp_agent.domain.audit_entry import AuditEntry, AuditValue
+from camp_agent.domain.case_activity import in_action, triages_follow_up
 from camp_agent.domain.case_state import CaseState, StateReason
 from camp_agent.domain.fault_type import FaultType
 from camp_agent.domain.route_guard import Route, TaskKind, TaskState, guard_route
@@ -132,6 +133,9 @@ class LangGraphTriage:
         if case.status.state is CaseState.PARKED:
             await self._commit(state, AuditEntry(SAFETY, "stop_parked", {"input": state["text"]}))
             return {"next": END}
+        if not triages_follow_up(case.status, await self._store.task_states(state["case_id"])):
+            await self._commit(state, AuditEntry(SAFETY, "joined", {"input": state["text"]}))
+            return {"next": END}
         await self._commit(state, AuditEntry(SAFETY, "clear", {"input": state["text"]}))
         return {"next": VERIFY}
 
@@ -149,6 +153,12 @@ class LangGraphTriage:
 
     async def _park(self, state: TriageState) -> TriageUpdate:
         case = await self._store.load(state["case_id"])
+        # A ticket may have been saved since the entry check; a parked case has none (I8).
+        if in_action(await self._store.task_states(state["case_id"])):
+            await self._commit(
+                state, AuditEntry(PARK, "refused_in_action"), case.change(case.status)
+            )
+            return {"next": END}
         status = case.status.park(StateReason.SPAM)
         await self._commit(state, AuditEntry(PARK, status.state), case.change(status))
         return {"next": END}

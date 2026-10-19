@@ -214,7 +214,7 @@ def test_d3_form_fields_reach_no_llm_or_audit(
         for table in ("audit_entries", "verification_attempts", "messages", "tasks", "cases")
         for row in rows(db, f"SELECT * FROM {table}")
     )
-    assert llm.calls.count("verify") == 2
+    assert llm.calls.count("verify") == 1
     for secret in ("Müller", "muller", "Okafor", "48213", "77777"):
         assert all(secret not in sent for sent in llm.inputs), secret
         assert secret not in stored, secret

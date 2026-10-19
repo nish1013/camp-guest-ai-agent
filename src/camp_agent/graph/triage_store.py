@@ -3,6 +3,7 @@ from typing import Protocol
 
 from camp_agent.domain.cabin_reports import ReportDraft, SavedReport
 from camp_agent.domain.fault_flow import FaultTask
+from camp_agent.domain.route_guard import TaskState
 from camp_agent.graph.triage_types import CaseSnapshot, LinkTarget, StepRecord, WaitingTask
 
 
@@ -18,6 +19,8 @@ class TriageStore(Protocol):
     async def awaiting_scope(self, case_id: int) -> list[WaitingTask]: ...
 
     async def faults(self, case_id: int) -> list[FaultTask]: ...
+
+    async def task_states(self, case_id: int) -> list[TaskState]: ...
 
     # One step of the CabinReports aggregate: the report records every open report in its cabin
     # that it was checked against (I4). A repeat step id returns the report already saved.

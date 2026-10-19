@@ -229,6 +229,9 @@ class InMemoryTriageStore:
     async def lock_case(self, case_id: int) -> AsyncIterator["InMemoryLockedCase"]:
         yield InMemoryLockedCase(self, case_id)
 
+    async def task_states(self, case_id: int) -> list[TaskState]:
+        return [task.state for task in self.tasks]
+
     async def faults(self, case_id: int) -> list[FaultTask]:
         return [
             FaultTask(

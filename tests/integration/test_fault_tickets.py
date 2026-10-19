@@ -9,10 +9,10 @@ from sqlalchemy import Engine
 from camp_agent.domain.fault_type import FaultType
 from camp_agent.domain.route_guard import Category, Route
 from camp_agent.domain.urgency import Urgency
-from camp_agent.llm.llm_types import Classification
+from camp_agent.llm.llm_types import Classification, Verdict
 from camp_agent.qr.qr_token import QrTokens
-from tests.fakes import FakeLlm
-from tests.integration.intake_support import SECRET, count, rows, send
+from tests.fakes import FakeLlm, demo_section
+from tests.integration.intake_support import SECRET, audit, count, rows, send
 
 C12 = QrTokens(SECRET).issue("C12", date(2026, 10, 18), date(2026, 10, 25))
 HOT_WATER = Classification(
@@ -190,3 +190,31 @@ def test_us4_malformed_answer_422(triage_client: TestClient, data: dict[str, str
     token = guest(triage_client, TWO)
 
     assert triage_client.post(f"/c/{token}/answer", data=data).status_code == 422
+
+
+@pytest.mark.parametrize(
+    "llm", [FakeLlm(classes=CLASSES, verdicts={"asdf!!!": Verdict.SPAM})], ids=["spam"]
+)
+def test_d14_follow_up_joins_case(triage_client: TestClient, db: Engine, llm: FakeLlm) -> None:
+    guest(triage_client, "no hot water")
+    calls = len(llm.calls)
+
+    send(triage_client, "asdf!!!")
+
+    assert len(llm.calls) == calls
+    assert count(db, "messages") == 2
+    assert rows(db, "SELECT state FROM cases") == [("open",)]
+    assert task_tickets(db) == [("ticketed", "T1")]
+    assert audit(db)[-1] == ("safety", "joined")
+
+
+def test_d14_smoke_follow_up_emergency(triage_client: TestClient, db: Engine) -> None:
+    guest(triage_client, "no hot water")
+
+    send(triage_client, "now there is smoke")
+
+    assert rows(db, "SELECT state, state_reason, safety, urgency FROM cases") == [
+        ("held", "emergency", True, "urgent")
+    ]
+    assert demo_section("emergency").body in triage_client.get("/").text
+    assert task_tickets(db)[0] == ("ticketed", "T1")

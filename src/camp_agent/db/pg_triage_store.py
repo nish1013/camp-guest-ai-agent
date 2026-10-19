@@ -9,6 +9,7 @@ from camp_agent.db.report_repository import ReportRepository
 from camp_agent.db.task_repository import TaskRepository
 from camp_agent.domain.cabin_reports import ReportDraft, SavedReport
 from camp_agent.domain.fault_flow import FaultTask
+from camp_agent.domain.route_guard import TaskState
 from camp_agent.graph.triage_types import (
     CaseSnapshot,
     LinkTarget,
@@ -33,6 +34,10 @@ class PgTriageStore:
     async def faults(self, case_id: int) -> list[FaultTask]:
         async with self._engine.connect() as conn:
             return await TaskRepository(conn).faults(case_id)
+
+    async def task_states(self, case_id: int) -> list[TaskState]:
+        async with self._engine.connect() as conn:
+            return await TaskRepository(conn).states(case_id)
 
     async def save_report(self, case_id: int, draft: ReportDraft) -> SavedReport:
         async with self._engine.begin() as conn:

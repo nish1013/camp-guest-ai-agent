@@ -94,6 +94,10 @@ class TaskRepository:
             for row in rows
         ]
 
+    async def states(self, case_id: int) -> list[TaskState]:
+        query = select(tasks.c.state).where(tasks.c.case_id == case_id)
+        return [TaskState(state) for state in (await self._conn.execute(query)).scalars()]
+
     async def has_actionable_faults(self, case_id: int) -> bool:
         query = select(
             exists().where(
