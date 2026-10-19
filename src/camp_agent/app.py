@@ -14,6 +14,7 @@ from camp_agent.config import Settings
 from camp_agent.db.engine import make_engine
 from camp_agent.db.pg_triage_store import PgTriageStore
 from camp_agent.db.probe import DatabaseProbe
+from camp_agent.domain.desk_hours import DeskHours
 from camp_agent.domain.safety_rule import SafetyRule
 from camp_agent.graph.guide_answerer import GuideAnswerer
 from camp_agent.graph.langgraph_triage import LangGraphTriage
@@ -22,8 +23,9 @@ from camp_agent.graph.triage_types import TriagePolicy
 from camp_agent.guide.guide_copy import copy_from_guide
 from camp_agent.guide.guide_port import GuidePort
 from camp_agent.guide.markdown_guide import MarkdownGuide
-from camp_agent.http import guest, health
+from camp_agent.http import guest, health, staff
 from camp_agent.http.guest import GuestServices
+from camp_agent.http.staff import StaffServices
 from camp_agent.intake.find_open_case import FindOpenCase
 from camp_agent.intake.list_answers import ListAnswers
 from camp_agent.intake.list_bookings import ListBookings
@@ -39,6 +41,7 @@ from camp_agent.llm.llm_port import LlmPort
 from camp_agent.llm.pydantic_ai_llm import PydanticAiLlm
 from camp_agent.llm.retrying_llm import RetryingLlm
 from camp_agent.qr.qr_token import QrTokens
+from camp_agent.staff.list_queue import ListQueue
 from camp_agent.stay.seed_stays import SeedStays
 from camp_agent.stay.stay_port import StayContextPort
 from camp_agent.ticket.demo_tickets import DemoTickets
@@ -56,7 +59,9 @@ def create_app(
     tickets: TicketPort | None = None,
 ) -> FastAPI:
     resolved = settings or Settings()
-    resolved_clock = clock or SystemClock(ZoneInfo(resolved.camp_timezone))
+    camp_tz = ZoneInfo(resolved.camp_timezone)
+    resolved_clock = clock or SystemClock(camp_tz)
+    desk = DeskHours(resolved.desk_opens, resolved.desk_closes, camp_tz)
     safety = SafetyRule(resolved.safety_terms)
 
     @asynccontextmanager
@@ -111,6 +116,13 @@ def create_app(
             step_up_form=StepUpForm(engine, resolved.step_up_case_failures),
             answer=SubmitAnswer(engine, resolved_clock),
         )
+        app.state.staff_services = StaffServices(
+            settings=resolved,
+            camp_timezone=camp_tz,
+            queue=ListQueue(
+                engine, resolved_clock, desk, timedelta(seconds=resolved.gate_timeout_s)
+            ),
+        )
         yield
         await engine.dispose()
 
@@ -123,6 +135,7 @@ def create_app(
     )
     app.include_router(health.router)
     app.include_router(guest.router)
+    app.include_router(staff.router)
     return app
 
 

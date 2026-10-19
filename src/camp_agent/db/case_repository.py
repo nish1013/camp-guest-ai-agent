@@ -1,3 +1,4 @@
+from collections.abc import Collection
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -32,6 +33,10 @@ class CaseRepository:
         )
         row = (await self._conn.execute(query)).one_or_none()
         return None if row is None else self._record(row)
+
+    async def in_states(self, states: Collection[CaseState]) -> list[CaseRecord]:
+        query = select(cases).where(cases.c.state.in_(states)).order_by(cases.c.id)
+        return [self._record(row) for row in (await self._conn.execute(query)).all()]
 
     async def create(self, case_token: str, scope: Scope | None) -> CaseRecord:
         values: dict[str, Any] = {"case_token": case_token, "state": CaseState.OPEN, "version": 0}
@@ -119,4 +124,4 @@ class CaseRepository:
             clarify_rounds=row.clarify_rounds,
             held_at=row.held_at,
         )
-        return CaseRecord(row.id, row.case_token, status, scope, row.version)
+        return CaseRecord(row.id, row.case_token, status, scope, row.version, row.created_at)

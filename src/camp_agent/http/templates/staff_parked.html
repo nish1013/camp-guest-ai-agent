@@ -1,0 +1,14 @@
+{% extends "staff_base.html" %}
+{% block content %}
+<h1>Parked</h1>
+<table>
+  <tr><th>Case</th><th>Reason</th><th>Since</th></tr>
+  {% for case in cases %}
+  <tr data-case="{{ case.id }}">
+    <td><a href="/staff/cases/{{ case.id }}">K{{ case.id }}</a></td>
+    <td data-reason>{{ case.status.reason }}</td>
+    <td>{{ case.created_at.astimezone(tz).strftime("%d %b %H:%M") }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

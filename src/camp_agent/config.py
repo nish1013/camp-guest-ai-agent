@@ -1,3 +1,4 @@
+from datetime import time
 from pathlib import Path
 
 from pydantic import SecretStr
@@ -33,3 +34,9 @@ class Settings(BaseSettings):
     step_up_ip_window_s: int = 3600
     guide_path: Path = Path("data/camp-guide.md")
     stays_path: Path = Path("data/stays.json")
+
+    staff_user: str = "staff"
+    staff_password: SecretStr = SecretStr("demo-only-set-STAFF_PASSWORD")
+    desk_opens: time = time(8)
+    desk_closes: time = time(22)
+    gate_timeout_s: int = 900
