@@ -21,14 +21,12 @@ flowchart LR
     GuidePort
     StayContextPort
     TicketPort
-    NotificationPort
     LlmPort
   end
   subgraph Demo["Demo adapters (Compose)"]
     GuideMd["camp-guide.md"]
     SeedStays["seed stays"]
     DemoTickets["demo_tickets table"]
-    CaseStatus["case status"]
     OpenAI["OpenAI via Pydantic AI"]
   end
   Guest --> Service
@@ -38,7 +36,6 @@ flowchart LR
   Graph --> GuidePort --> GuideMd
   Graph --> StayContextPort --> SeedStays
   Graph --> TicketPort --> DemoTickets
-  Graph --> NotificationPort --> CaseStatus
   Graph --> LlmPort --> OpenAI
   Service --> DB[("Postgres")]
 ```
@@ -152,4 +149,20 @@ flowchart LR
   Check -- yes --> Act["resolve, restore,<br/>booking status"]
   Act --> Settle["close when every task is done,<br/>reopen on open work (I11)"]
   Settle --> Drive["run picks up approved work<br/>and restored messages"]
+```
+
+## Guest page
+
+A returning guest names the case (D4). Status is derived from case state on every read, never
+stored (D25, plan-deviations D20).
+
+```mermaid
+flowchart LR
+  Cookie["case cookie"] --> Offer{"case open, held<br/>or parked?"}
+  Offer -- yes --> Prompt["Add to C12 or new request?<br/>form names the offered case"]
+  Offer -- no --> Picks["quick picks + text"]
+  Prompt -- add --> Join["join: safety rule only<br/>when in action (D4)"]
+  Prompt -- new --> Picks --> New["new case, pick saved<br/>hint for classify (D51)"]
+  Page["case page"] -- "SSE, poll case state" --> Render["fixed templates (D25)<br/>desk hours (D30)"]
+  Render -- "status lines, forms:<br/>sent when changed" --> Page
 ```

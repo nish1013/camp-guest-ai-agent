@@ -137,3 +137,24 @@ Plan:     domain.md, eventual consistency: "No inbox table: the version check ma
 Built:    a status pass lists the tasks holding a ticket ref under `pg_advisory_lock` on that ref. A step that gives a task a ticket ref, by create or by link, takes the same lock in its transaction, before the case row, and copies the newest status any task with that ref holds. An event no task holds yet stays in the outbox.
 Why:      a link reads the earlier task's status before it commits. A pass that applied a newer status and deleted the event in between left the linked task behind for good, and a case that never sees "done" never closes (I11, I12). The version check cannot catch a task the pass never saw.
 Undo:     drop `lock_ticket` from `write_step` and the pass, and delete an event that matched no task.
+
+## D20. The case page derives status on read; no `NotificationPort` (PR 9, 2026-10-19)
+
+Plan:     decisions.md D22: "`NotificationPort` demo adapter writes case status." architecture.md: "Graph --> NotificationPort --> case status".
+Built:    no `NotificationPort`. `GET /c/{case_token}/events` reads the case and its tasks every `STATUS_POLL_S` and renders the fixed templates (D25). The status lines and the guest's forms are two events, each sent only when its HTML changes. The event id names both; a reconnect sends it back as `Last-Event-ID`, and the page link carries the id of its first render, so nothing unchanged is sent again. A stream ends after `STATUS_STREAM_S` and the browser reconnects.
+Why:      domain.md lists guest status text as derived from case state, with nothing stored. A port that writes status would keep a second copy that can disagree with the case. Sending the forms apart from the status lines keeps a half-typed step-up form on screen while a ticket line changes.
+Undo:     add a `NotificationPort` that the graph calls after each step, and stream what it writes.
+
+## D21. Add posts the offered case; a case closed since follows D20 (PR 9, 2026-10-19)
+
+Plan:     decisions.md D4: "A returning guest with an open case is asked 'Add to C12 or new request?'. Add joins the case ... New request opens a new case." The plan does not say which case Add joins once the cookie or the case has changed.
+Built:    the prompt offers the cookie's case only while it is open, held or parked (`find_open_by_token`). The form posts the offered case's token with the choice, not the cookie. Add on a case that closed after the page loaded follows D20: within 24 hours it reopens, later a new case opens. A post with no choice, from a page that offered nothing, joins the cookie's case as before.
+Why:      a second tab that opened a new request moves the cookie, so the cookie no longer names the case the guest saw. A message the guest chose to add is a reply, and D20 already rules how a reply treats a closed case. Dropping it, or asking again, loses guest input.
+Undo:     drop the `offered` field and join the cookie's case; refuse Add on a closed case with a fresh prompt.
+
+## D22. The pick is stored on the message that opens a case (PR 9, 2026-10-19)
+
+Plan:     Storage: `messages` has "idempotency_key unique, case_id, masked text". decisions.md D51: "The audit stores the pick next to the LLM category."
+Built:    `messages` also has `pick`, with a `CHECK` on the five values. `SubmitMessage` keeps the pick only when the message opens a case; a message that joins or reopens a case stores none. A run passes the batch's pick to classify, and the classify audit entry holds `pick` beside `category`.
+Why:      the pick is chosen with the message and must survive until a run takes it, which may be after a restart (D6). D51 offers picks to a new request only, and the server decides that, not the form.
+Undo:     drop the column in a migration; the pick then reaches the run in memory and is lost on a restart.
