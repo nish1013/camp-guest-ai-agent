@@ -1,8 +1,15 @@
+from contextlib import AbstractAsyncContextManager
 from typing import Protocol
 
 from camp_agent.domain.cabin_reports import ReportDraft, SavedReport
 from camp_agent.domain.fault_flow import FaultTask
 from camp_agent.graph.triage_types import CaseSnapshot, LinkTarget, StepRecord, WaitingTask
+
+
+class LockedCase(Protocol):
+    case: CaseSnapshot
+
+    async def commit(self, step: StepRecord) -> None: ...
 
 
 class TriageStore(Protocol):
@@ -17,6 +24,9 @@ class TriageStore(Protocol):
     async def save_report(self, case_id: int, draft: ReportDraft) -> SavedReport: ...
 
     async def link_target(self, report_id: int) -> LinkTarget | None: ...
+
+    # Holds the case row from the read to the commit, so no status write lands in between.
+    def lock_case(self, case_id: int) -> AbstractAsyncContextManager[LockedCase]: ...
 
     # One graph step: the case changes, its tasks and its audit entry in one transaction (I13).
     # Raises StaleCaseError when the case changed since the status was computed.

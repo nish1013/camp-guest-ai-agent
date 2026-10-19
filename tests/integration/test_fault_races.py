@@ -1,14 +1,18 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import timedelta
 from uuid import uuid4
 
 import anyio
 import pytest
+from anyio.abc import TaskGroup
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from camp_agent.db.case_repository import CaseRepository
 from camp_agent.db.message_repository import MessageRepository
+from camp_agent.db.pg_locked_case import PgLockedCase
 from camp_agent.db.pg_triage_store import PgTriageStore
 from camp_agent.db.task_repository import TaskRepository
 from camp_agent.domain.audit_entry import AuditEntry
@@ -126,18 +130,21 @@ async def test_i4_second_report_sees_first(async_db: AsyncEngine) -> None:
 
 
 async def test_i3_crash_after_create_one_ticket(db: Engine, async_db: AsyncEngine) -> None:
-    class CrashOnTicket(PgTriageStore):
-        crashed = False
+    class CrashAfterCreate:
+        def __init__(self, inner: TicketPort) -> None:
+            self._inner = inner
+            self.crashed = False
 
-        async def commit(self, case_id: int, step: StepRecord) -> None:
-            if step.audit.step == "ticket" and not self.crashed:
+        async def create(self, request: TicketRequest) -> TicketReceipt:
+            receipt = await self._inner.create(request)
+            if not self.crashed:
                 self.crashed = True
                 raise RuntimeError("crash")
-            await super().commit(case_id, step)
+            return receipt
 
     case_id = await scoped_case(async_db)
     await add_message(async_db, case_id)
-    coordinator = triage(async_db, DemoTickets(async_db), CrashOnTicket(async_db))
+    coordinator = triage(async_db, CrashAfterCreate(DemoTickets(async_db)))
 
     with pytest.raises(RuntimeError, match="crash"):
         await coordinator.drive(case_id)
@@ -159,25 +166,60 @@ async def test_i5_ticket_cabin_is_case_cabin(async_db: AsyncEngine) -> None:
         )
 
 
-async def test_i8_park_during_run_no_ticket(db: Engine, async_db: AsyncEngine) -> None:
-    class ParkOnCreate:
-        def __init__(self, inner: TicketPort) -> None:
-            self._inner = inner
+async def park(engine: AsyncEngine, case_id: int) -> bool:
+    async with engine.connect() as conn:
+        case = await CaseRepository(conn).get(case_id)
+    async with engine.begin() as conn:
+        return await CaseRepository(conn).save_status(
+            case_id, case.status.park(StateReason.SPAM), case.version
+        )
 
-        # Parks the case between the step reading it and the step saving the ticket.
+
+async def test_i8_park_before_create_no_ticket(db: Engine, async_db: AsyncEngine) -> None:
+    class ParkBeforeLock(PgTriageStore):
+        # Parks the case after the args passed validation and before the ticket is created.
+        @asynccontextmanager
+        async def lock_case(self, case_id: int) -> AsyncIterator[PgLockedCase]:
+            assert await park(async_db, case_id)
+            async with super().lock_case(case_id) as locked:
+                yield locked
+
+    case_id = await scoped_case(async_db)
+    await add_message(async_db, case_id)
+
+    await triage(async_db, DemoTickets(async_db), ParkBeforeLock(async_db)).drive(case_id)
+
+    assert count(db, "demo_tickets") == 0
+    assert rows(db, "SELECT state, state_reason FROM cases") == [("parked", "spam")]
+    assert rows(db, "SELECT state, ticket_ref FROM tasks") == [("queued", None)]
+    assert audit(db)[-1] == ("ticket", "stopped_parked")
+
+
+async def test_i8_park_during_create_refused(db: Engine, async_db: AsyncEngine) -> None:
+    parked: list[bool] = []
+
+    class ParkDuringCreate:
+        def __init__(self, inner: TicketPort, tg: TaskGroup) -> None:
+            self._inner = inner
+            self._tg = tg
+
+        # A second connection parks the case while the ticket is being created and saved.
         async def create(self, request: TicketRequest) -> TicketReceipt:
-            async with async_db.begin() as conn:
-                cases = CaseRepository(conn)
-                case = await cases.get(request.key.case_id)
-                parked = case.status.park(StateReason.SPAM)
-                assert await cases.save_status(case.id, parked, case.version)
+            async def attempt() -> None:
+                parked.append(await park(async_db, request.key.case_id))
+
+            self._tg.start_soon(attempt)
+            with anyio.move_on_after(2):
+                await wait_for(async_db, 1)
             return await self._inner.create(request)
 
     case_id = await scoped_case(async_db)
     await add_message(async_db, case_id)
 
-    await triage(async_db, ParkOnCreate(DemoTickets(async_db))).drive(case_id)
+    async with anyio.create_task_group() as tg:
+        tickets = ParkDuringCreate(DemoTickets(async_db), tg)
+        await triage(async_db, tickets).drive(case_id)
 
-    assert rows(db, "SELECT state, state_reason FROM cases") == [("parked", "spam")]
-    assert rows(db, "SELECT state, ticket_ref FROM tasks") == [("queued", None)]
-    assert audit(db)[-1] == ("ticket", "stopped_parked")
+    assert parked == [False]
+    assert rows(db, "SELECT state FROM cases") == [("open",)]
+    assert rows(db, "SELECT state, ticket_ref FROM tasks") == [("ticketed", "T1")]

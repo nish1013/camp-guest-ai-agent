@@ -36,7 +36,7 @@ from camp_agent.llm.llm_port import LlmPort
 from camp_agent.llm.llm_types import TicketBrief
 from camp_agent.ticket.ticket_error import TicketError
 from camp_agent.ticket.ticket_port import TicketPort
-from camp_agent.ticket.ticket_types import TicketKey, TicketRequest
+from camp_agent.ticket.ticket_types import TicketKey, TicketReceipt, TicketRequest
 
 VALIDATE = "validate"
 TICKET = "ticket"
@@ -160,22 +160,30 @@ class FaultDesk:
             fault.urgency,
             args.summary,
         )
-        try:
-            receipt = await self._tickets.create(request)
-        except TicketError:
+        # A park waits for this commit or is seen here before the ticket exists (I8).
+        async with self._store.lock_case(state["case_id"]) as locked:
+            if locked.case.status.state is CaseState.PARKED:
+                await locked.commit(StepRecord(AuditEntry(TICKET, "stopped_parked", detail)))
+                return {"next": END}
+            try:
+                receipt: TicketReceipt | None = await self._tickets.create(request)
+            except TicketError:
+                receipt = None
+            if receipt is not None:
+                link = TicketLink(receipt.ref, receipt.status, receipt.version, scope.cabin)
+                detail |= {"ticket": receipt.ref, "team": team}
+                move = TaskTransition(fault.step_id, TaskState.TICKETED, fault.state, ticket=link)
+                step = StepRecord(
+                    AuditEntry(TICKET, "created", detail),
+                    locked.case.change(locked.case.status),
+                    transitions=(move,),
+                    validation=record,
+                )
+                await locked.commit(step)
+        # Outside the lock: the hold writes the case row from a connection of its own.
+        if receipt is None:
             audit = AuditEntry(TICKET, "held", detail)
-            return await self._hold(state, fault, StateReason.TICKETING_DOWN, audit, case, record)
-        link = TicketLink(receipt.ref, receipt.status, receipt.version, scope.cabin)
-        detail |= {"ticket": receipt.ref, "team": team}
-        move = TaskTransition(fault.step_id, TaskState.TICKETED, fault.state, ticket=link)
-        # The version check refuses the ticket on a case parked since it was read (I8).
-        await self._commit(
-            state,
-            AuditEntry(TICKET, "created", detail),
-            case,
-            transitions=(move,),
-            validation=record,
-        )
+            return await self._hold(state, fault, StateReason.TICKETING_DOWN, audit, None, record)
         return await self.route(state["case_id"])
 
     async def link(self, state: TriageState) -> TriageUpdate:

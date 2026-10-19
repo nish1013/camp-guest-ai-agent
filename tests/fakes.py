@@ -1,4 +1,5 @@
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -224,6 +225,10 @@ class InMemoryTriageStore:
             self.validations.append(step.validation)
         self.audit.append(step.audit)
 
+    @asynccontextmanager
+    async def lock_case(self, case_id: int) -> AsyncIterator["InMemoryLockedCase"]:
+        yield InMemoryLockedCase(self, case_id)
+
     async def faults(self, case_id: int) -> list[FaultTask]:
         return [
             FaultTask(
@@ -287,3 +292,13 @@ class InMemoryTriageStore:
 
     def status(self, case_id: int) -> CaseStatus:
         return self.cases[case_id].status
+
+
+class InMemoryLockedCase:
+    def __init__(self, store: InMemoryTriageStore, case_id: int) -> None:
+        self._store = store
+        self._case_id = case_id
+        self.case = store.cases[case_id]
+
+    async def commit(self, step: StepRecord) -> None:
+        await self._store.commit(self._case_id, step)
