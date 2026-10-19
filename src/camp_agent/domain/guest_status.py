@@ -5,6 +5,7 @@ from camp_agent.domain.case_status import CaseStatus
 from camp_agent.domain.fault_type import FaultType
 from camp_agent.domain.route_guard import TaskState
 from camp_agent.domain.specialist import Team
+from camp_agent.domain.ticket_status import TicketStatus
 
 RECEIVED = "Received"
 CLARIFY = "Could you tell us a bit more about what you need?"
@@ -21,6 +22,12 @@ LOGGED = {
     Team.MAINTENANCE: "Logged with maintenance",
     Team.HOUSEKEEPING: "Logged with housekeeping",
 }
+WORKING = {
+    Team.MAINTENANCE: "Maintenance is working on it",
+    Team.HOUSEKEEPING: "Housekeeping is working on it",
+}
+TICKET_DONE = "Done"
+TICKET_CANCELLED = "Cancelled"
 
 _HELD: dict[StateReason | None, str] = {
     StateReason.MONEY: WAITING_ON_RECEPTION,
@@ -56,6 +63,17 @@ def same_question(fault_type: FaultType, at: str) -> str:
 
 def table_line(party: int, day: date, at: time) -> str:
     return f"Table for {party} at {at:%H:%M} on {day.day} {day:%b}"
+
+
+def ticket_status(team: Team, status: TicketStatus | None) -> str:
+    # The line follows the ticket system's status, so a job reads done only when it is (D25).
+    if status is TicketStatus.IN_PROGRESS:
+        return WORKING[team]
+    if status is TicketStatus.DONE:
+        return TICKET_DONE
+    if status is TicketStatus.CANCELLED:
+        return TICKET_CANCELLED
+    return LOGGED[team]
 
 
 def booking_status(state: TaskState, party: int, at: time) -> str:

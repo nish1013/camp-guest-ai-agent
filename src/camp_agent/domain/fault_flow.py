@@ -4,6 +4,7 @@ from enum import StrEnum
 
 from camp_agent.domain.fault_type import FaultType
 from camp_agent.domain.route_guard import Category, TaskState
+from camp_agent.domain.ticket_status import TicketStatus
 from camp_agent.domain.urgency import Urgency
 
 TO_REPORT = frozenset({TaskState.QUEUED, TaskState.SPLIT_CONFIRMED})
@@ -19,6 +20,7 @@ class FaultTask:
     urgency: Urgency
     summary: str
     same_report_id: int | None = None
+    ticket_status: TicketStatus | None = None
 
 
 def batch_of(step_id: str) -> str:

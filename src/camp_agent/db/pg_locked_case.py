@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from camp_agent.db.audit_repository import AuditRepository
 from camp_agent.db.case_repository import CaseRepository
 from camp_agent.db.task_repository import TaskRepository
+from camp_agent.db.ticket_lock import lock_ticket_xact
 from camp_agent.db.validation_repository import ValidationRepository
 from camp_agent.graph.stale_case_error import StaleCaseError
 from camp_agent.graph.triage_types import CaseSnapshot, StepRecord
@@ -19,6 +20,10 @@ class PgLockedCase:
 
 
 async def write_step(conn: AsyncConnection, case_id: int, step: StepRecord) -> None:
+    # Taken before the case row, as the status handler does, so the two never wait in a circle.
+    for transition in step.transitions:
+        if transition.ticket is not None:
+            await lock_ticket_xact(conn, transition.ticket.ref)
     change = step.status
     if change is not None and not await CaseRepository(conn).save_status(
         case_id, change.status, change.version

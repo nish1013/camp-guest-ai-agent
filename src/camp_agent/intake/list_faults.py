@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from camp_agent.db.report_repository import ReportRepository
 from camp_agent.db.task_repository import TaskRepository
 from camp_agent.domain.fault_flow import Confirmation, batch_of
-from camp_agent.domain.guest_status import LOGGED, same_question, split_question
+from camp_agent.domain.guest_status import same_question, split_question, ticket_status
 from camp_agent.domain.route_guard import TaskState
 from camp_agent.domain.specialist import specialist_for
 from camp_agent.intake.answer_types import CaseFaults, QuestionView, TicketLine
@@ -24,7 +24,9 @@ class ListFaults:
             for fault in await TaskRepository(conn).faults(case_id):
                 team = specialist_for(fault.category)
                 if fault.state is TaskState.TICKETED and team is not None:
-                    tickets.append(TicketLine(fault.summary, LOGGED[team]))
+                    tickets.append(
+                        TicketLine(fault.summary, ticket_status(team, fault.ticket_status))
+                    )
                 elif fault.state is TaskState.AWAITING_SPLIT:
                     split.setdefault(batch_of(fault.step_id), []).append(fault.summary)
                 elif fault.state is TaskState.AWAITING_SAME and fault.same_report_id is not None:

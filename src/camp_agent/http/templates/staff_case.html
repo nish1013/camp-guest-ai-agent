@@ -20,7 +20,15 @@
     <td>{{ task.urgency }}</td>
     <td data-task-state>{{ task.state }}</td>
     <td>
-      {% if task.ticket_ref %}{{ task.ticket_ref }}: {{ task.ticket_status }}{% endif %}
+      {% if task.ticket_ref %}{{ task.ticket_ref }}: {{ task.ticket_status }}
+      <form method="post" action="/staff/tickets/{{ task.ticket_ref }}/status" data-ticket-form>
+        <input type="hidden" name="case_id" value="{{ case.id }}">
+        <select name="status" aria-label="Ticket status">
+          {% for option in ["open", "in_progress", "done", "cancelled"] %}<option{% if task.ticket_status == option %} selected{% endif %}>{{ option }}</option>{% endfor %}
+        </select>
+        <button type="submit">Set status</button>
+      </form>
+      {% endif %}
       {% if task.booking_party %}{{ task.booking_party }} at {{ task.booking_time.strftime("%H:%M") }} on {{ task.booking_date }}{% endif %}
       {% if task.state == "held" %}
       <form method="post" action="/staff/cases/{{ case.id }}/resolve" data-resolve-form>

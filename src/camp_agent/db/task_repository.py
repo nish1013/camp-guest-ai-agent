@@ -21,7 +21,14 @@ from camp_agent.domain.table_flow import (
 )
 from camp_agent.domain.ticket_status import TicketStatus
 from camp_agent.domain.urgency import Urgency
-from camp_agent.graph.triage_types import TaskAnswer, TaskDraft, TaskTransition, WaitingTask
+from camp_agent.graph.triage_types import (
+    TaskAnswer,
+    TaskDraft,
+    TaskTransition,
+    TicketLink,
+    WaitingTask,
+)
+from camp_agent.ticket.ticket_types import TicketStatusChanged
 
 
 class TaskRepository:
@@ -101,6 +108,7 @@ class TaskRepository:
                 Urgency(row.urgency),
                 row.summary,
                 row.same_report_id,
+                None if row.ticket_status is None else TicketStatus(row.ticket_status),
             )
             for row in rows
         ]
@@ -202,6 +210,29 @@ class TaskRepository:
             for row in (await self._conn.execute(query)).all()
         ]
 
+    async def cases_with_ticket(self, ticket_ref: str) -> list[int]:
+        query = (
+            select(tasks.c.case_id)
+            .where(tasks.c.ticket_ref == ticket_ref)
+            .distinct()
+            .order_by(tasks.c.case_id)
+        )
+        return list((await self._conn.execute(query)).scalars())
+
+    async def apply_ticket_status(self, case_id: int, event: TicketStatusChanged) -> bool:
+        # A version at or below the stored one is a repeat or arrived late (D45, I12).
+        applied = await self._conn.execute(
+            update(tasks)
+            .where(
+                tasks.c.case_id == case_id,
+                tasks.c.ticket_ref == event.ticket_ref,
+                tasks.c.ticket_version < event.version,
+            )
+            .values(ticket_status=event.status, ticket_version=event.version)
+            .returning(tasks.c.id)
+        )
+        return len(applied.all()) > 0
+
     async def states(self, case_id: int) -> list[TaskState]:
         query = select(tasks.c.state).where(tasks.c.case_id == case_id)
         return [TaskState(state) for state in (await self._conn.execute(query)).scalars()]
@@ -228,10 +259,11 @@ class TaskRepository:
         if transition.same_report_id is not None:
             values["same_report_id"] = transition.same_report_id
         if transition.ticket is not None:
+            status, version = await self._freshest(transition.ticket)
             values |= {
                 "ticket_ref": transition.ticket.ref,
-                "ticket_status": transition.ticket.status,
-                "ticket_version": transition.ticket.version,
+                "ticket_status": status,
+                "ticket_version": version,
                 "cabin": transition.ticket.cabin,
             }
         if transition.booking is not None:
@@ -252,3 +284,17 @@ class TaskRepository:
             .returning(tasks.c.id)
         )
         return moved.one_or_none() is not None
+
+    # Under the ticket lock: a status the handler applied to a linked task after the link read
+    # it is carried over, so no event is missed (I12).
+    async def _freshest(self, link: TicketLink) -> tuple[TicketStatus, int]:
+        query = (
+            select(tasks.c.ticket_status, tasks.c.ticket_version)
+            .where(tasks.c.ticket_ref == link.ref, tasks.c.ticket_version > link.version)
+            .order_by(tasks.c.ticket_version.desc())
+            .limit(1)
+        )
+        row = (await self._conn.execute(query)).one_or_none()
+        if row is None:
+            return link.status, link.version
+        return TicketStatus(row.ticket_status), row.ticket_version

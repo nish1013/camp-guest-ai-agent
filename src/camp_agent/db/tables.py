@@ -144,3 +144,13 @@ ip_verification_failures = Table(
     Column("ip", Text, nullable=False),
     Column("failed_at", DateTime(timezone=True), nullable=False),
 )
+
+ticket_events = Table(
+    "ticket_events",
+    metadata,
+    Column("id", BigInteger, primary_key=True),
+    Column("ticket_ref", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)

@@ -1,5 +1,6 @@
+import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import timedelta
 from zoneinfo import ZoneInfo
 
@@ -26,11 +27,13 @@ from camp_agent.guide.markdown_guide import MarkdownGuide
 from camp_agent.http import guest, health, staff
 from camp_agent.http.guest import GuestServices
 from camp_agent.http.staff import StaffServices
+from camp_agent.intake.apply_ticket_status import ApplyTicketStatus
 from camp_agent.intake.find_case import FindCase
 from camp_agent.intake.list_answers import ListAnswers
 from camp_agent.intake.list_bookings import ListBookings
 from camp_agent.intake.list_declined import ListDeclined
 from camp_agent.intake.list_faults import ListFaults
+from camp_agent.intake.outbox_poller import OutboxPoller
 from camp_agent.intake.rate_limiter import SlidingWindowLimiter
 from camp_agent.intake.run_coordinator import RunCoordinator
 from camp_agent.intake.step_up_form import StepUpForm
@@ -49,6 +52,7 @@ from camp_agent.staff.set_booking_status import SetBookingStatus
 from camp_agent.staff.show_case import ShowCase
 from camp_agent.stay.seed_stays import SeedStays
 from camp_agent.stay.stay_port import StayContextPort
+from camp_agent.ticket.demo_ticket_status import DemoTicketStatus
 from camp_agent.ticket.demo_tickets import DemoTickets
 from camp_agent.ticket.retrying_tickets import RetryingTickets
 from camp_agent.ticket.ticket_port import TicketPort
@@ -130,6 +134,7 @@ def create_app(
             answer=SubmitAnswer(engine, resolved_clock),
         )
         gate = timedelta(seconds=resolved.gate_timeout_s)
+        ticket_status = ApplyTicketStatus(engine, resolved_clock)
         app.state.staff_services = StaffServices(
             settings=resolved,
             camp_timezone=camp_tz,
@@ -139,8 +144,17 @@ def create_app(
             resolve=ResolveAsHuman(engine, resolved_clock),
             restore=RestoreCase(engine, resolved_clock, stay_port),
             coordinator=coordinator,
+            tickets=DemoTicketStatus(engine),
+            ticket_status=ticket_status,
         )
+        poller = None
+        if resolved.outbox_poll_s > 0:
+            poller = asyncio.create_task(OutboxPoller(ticket_status, resolved.outbox_poll_s).run())
         yield
+        if poller is not None:
+            poller.cancel()
+            with suppress(asyncio.CancelledError):
+                await poller
         await engine.dispose()
 
     app = FastAPI(title="Camp Guest AI Agent", lifespan=lifespan)

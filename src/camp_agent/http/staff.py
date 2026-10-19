@@ -9,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 
 from camp_agent.config import Settings
 from camp_agent.domain.route_guard import Category
+from camp_agent.domain.ticket_status import TicketStatus
 from camp_agent.domain.urgency import Urgency
 from camp_agent.http.staff_auth import (
     LOGIN_PATH,
@@ -16,6 +17,7 @@ from camp_agent.http.staff_auth import (
     credentials_match,
     require_staff,
 )
+from camp_agent.intake.apply_ticket_status import ApplyTicketStatus
 from camp_agent.intake.run_coordinator import RunCoordinator
 from camp_agent.staff.list_queue import ListQueue
 from camp_agent.staff.resolve_as_human import ResolveAsHuman
@@ -27,6 +29,7 @@ from camp_agent.staff.show_case import ShowCase
 from camp_agent.staff.staff_conflict_error import StaffConflictError
 from camp_agent.staff.staff_types import BookingDecision, ResolveCommand, RestoreCommand
 from camp_agent.stay.stay_error import StayError
+from camp_agent.ticket.demo_ticket_status import DemoTicketStatus
 
 QUEUE_PATH = "/staff/cases"
 LOGIN_REFUSED = "Wrong user name or password."
@@ -48,6 +51,8 @@ class StaffServices:
     resolve: ResolveAsHuman
     restore: RestoreCase
     coordinator: RunCoordinator
+    tickets: DemoTicketStatus
+    ticket_status: ApplyTicketStatus
 
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
@@ -83,7 +88,7 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
     request.session[STAFF_SESSION_KEY] = True
-    return RedirectResponse(QUEUE_PATH, status_code=status.HTTP_303_SEE_OTHER)
+    return _to_queue()
 
 
 @router.post("/logout")
@@ -182,6 +187,25 @@ async def restore(
     # Triage runs again over the messages the park stopped (D33).
     background.add_task(services.coordinator.drive, case_id)
     return _to_case(case_id)
+
+
+@guarded.post("/tickets/{ticket_ref}/status")
+async def ticket_status(
+    background: BackgroundTasks,
+    services: Services,
+    ticket_ref: str,
+    ticket_status: Annotated[TicketStatus, Form(alias="status")],
+    case_id: Annotated[int | None, Form()] = None,
+) -> RedirectResponse:
+    # The demo ticket system: real adapters send the same event by webhook or polling (D10).
+    if await services.tickets.set(ticket_ref, ticket_status) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    background.add_task(services.ticket_status.handle_pending)
+    return _to_case(case_id) if case_id is not None else _to_queue()
+
+
+def _to_queue() -> RedirectResponse:
+    return RedirectResponse(QUEUE_PATH, status_code=status.HTTP_303_SEE_OTHER)
 
 
 def _to_case(case_id: int) -> RedirectResponse:
