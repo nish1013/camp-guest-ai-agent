@@ -28,6 +28,7 @@ module-name = "camp_agent"
 dev = [
     "httpx2>=2.14.0",
     "mypy>=2.4.0",
+    "pydantic-evals>=2.57.0",
     "pytest>=9.1.1",
     "ruff>=0.17.1",
     "testcontainers[postgres]>=4.15.0",

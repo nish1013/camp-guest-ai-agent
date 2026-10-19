@@ -1,4 +1,4 @@
-.PHONY: lint format test test-int
+.PHONY: lint format test test-int evals
 
 lint:
 	uv run ruff format --check .
@@ -14,3 +14,6 @@ test:
 
 test-int:
 	uv run pytest tests/integration
+
+evals:
+	uv run python -m tests.evals.run_evals
