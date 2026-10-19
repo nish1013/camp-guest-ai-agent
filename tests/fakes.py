@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 from camp_agent.config import Settings
 from camp_agent.domain.audit_entry import AuditEntry
 from camp_agent.domain.case_status import CaseStatus
-from camp_agent.domain.route_guard import Category, Route
+from camp_agent.domain.route_guard import Category, Route, TaskState
 from camp_agent.domain.scope import Scope
 from camp_agent.domain.urgency import Urgency
 from camp_agent.graph.stale_case_error import StaleCaseError
@@ -16,6 +16,7 @@ from camp_agent.graph.triage_types import (
     StepRecord,
     TaskAnswer,
     TaskDraft,
+    WaitingTask,
 )
 from camp_agent.guide.guide_error import GuideError
 from camp_agent.guide.guide_port import GuidePort
@@ -23,6 +24,10 @@ from camp_agent.guide.guide_types import GuideSection
 from camp_agent.guide.markdown_guide import MarkdownGuide, parse_guide
 from camp_agent.llm.llm_error import LlmError
 from camp_agent.llm.llm_types import Classification, GuideAnswer, Verdict
+from camp_agent.stay.seed_stays import SeedStays
+from camp_agent.stay.stay_error import StayError
+from camp_agent.stay.stay_port import StayContextPort
+from camp_agent.stay.stay_types import Booking
 
 CAMP_TZ = ZoneInfo("Europe/London")
 QUESTION = Classification(
@@ -90,29 +95,48 @@ class FakeLlm:
         self._answers = answers or {}
         self._down = down
         self.calls: list[str] = []
+        self.inputs: list[str] = []
         self.offered: list[str] = []
 
     async def verify(self, text: str) -> Verdict:
-        self._call("verify")
+        self._call("verify", text)
         return self._verdicts.get(text, Verdict.GENUINE)
 
     async def split(self, text: str) -> list[str]:
-        self._call("split")
+        self._call("split", text)
         return self._splits.get(text, [text])
 
     async def classify(self, intent: str) -> Classification:
-        self._call("classify")
+        self._call("classify", intent)
         return self._classes.get(intent, QUESTION)
 
     async def answer(self, question: str, sections: Sequence[GuideSection]) -> GuideAnswer:
-        self._call("answer")
+        self._call("answer", question, *(section.body for section in sections))
         self.offered = [section.id for section in sections]
         return self._answers.get(question, NO_ANSWER)
 
-    def _call(self, name: str) -> None:
+    def _call(self, name: str, *inputs: str) -> None:
         self.calls.append(name)
+        self.inputs.extend(inputs)
         if self._down:
             raise LlmError("down")
+
+
+class SwitchableStays:
+    def __init__(self, inner: StayContextPort) -> None:
+        self._inner = inner
+        self.down = False
+        self.lookups = 0
+
+    async def find_booking(self, booking_ref: str) -> Booking | None:
+        self.lookups += 1
+        if self.down:
+            raise StayError("down")
+        return await self._inner.find_booking(booking_ref)
+
+
+def demo_stays() -> SwitchableStays:
+    return SwitchableStays(SeedStays(Settings().stays_path))
 
 
 class InMemoryTriageStore:
@@ -133,7 +157,21 @@ class InMemoryTriageStore:
             self.write_status(case_id, step.status)
         self.tasks.extend(step.tasks)
         self.answers.extend(step.answers)
+        states = {transition.step_id: transition.state for transition in step.resumed}
+        self.tasks = [
+            replace(task, state=states[task.step_id])
+            if task.step_id in states and task.state is TaskState.AWAITING_SCOPE
+            else task
+            for task in self.tasks
+        ]
         self.audit.append(step.audit)
+
+    async def awaiting_scope(self, case_id: int) -> list[WaitingTask]:
+        return [
+            WaitingTask(task.step_id, task.kind, task.category)
+            for task in self.tasks
+            if task.state is TaskState.AWAITING_SCOPE and task.category is not None
+        ]
 
     def write_status(self, case_id: int, change: StatusChange) -> None:
         case = self.cases[case_id]

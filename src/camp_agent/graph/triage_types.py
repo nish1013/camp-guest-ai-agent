@@ -43,11 +43,25 @@ class TaskAnswer:
 
 
 @dataclass(frozen=True)
+class WaitingTask:
+    step_id: str
+    kind: TaskKind
+    category: Category
+
+
+@dataclass(frozen=True)
+class TaskTransition:
+    step_id: str
+    state: TaskState
+
+
+@dataclass(frozen=True)
 class StepRecord:
     audit: AuditEntry
     status: StatusChange | None = None
     tasks: tuple[TaskDraft, ...] = ()
     answers: tuple[TaskAnswer, ...] = ()
+    resumed: tuple[TaskTransition, ...] = ()
 
 
 @dataclass(frozen=True)

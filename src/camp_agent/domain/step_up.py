@@ -3,6 +3,8 @@ import unicodedata
 from datetime import date
 from enum import StrEnum
 
+from camp_agent.domain.case_state import CaseState
+from camp_agent.domain.case_status import CaseStatus
 from camp_agent.domain.scope import Scope, ScopeSource
 from camp_agent.stay.stay_types import Booking
 
@@ -52,3 +54,11 @@ def limit_reached(failures: int, limit: int) -> bool:
 
 def step_up_scope(booking: Booking) -> Scope:
     return Scope(booking.cabin, booking.stay_from, booking.stay_to, ScopeSource.STEP_UP)
+
+
+def asks_step_up(status: CaseStatus, scope: Scope | None, waiting: bool, locked: bool) -> bool:
+    return scope is None and waiting and not locked and status.state is not CaseState.PARKED
+
+
+def resumes_waiting(status: CaseStatus, scope: Scope | None) -> bool:
+    return scope is not None and status.state is not CaseState.PARKED

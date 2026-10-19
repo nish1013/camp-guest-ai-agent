@@ -26,5 +26,8 @@ class Settings(BaseSettings):
     safety_terms: list[str] = ["fire", "gas", "smoke", "flood", "medical", "injury"]
     held_categories: list[str] = ["refund", "compensation", "cabin_move", "safety_close_out"]
     clarify_max_rounds: int = 2
+    step_up_case_failures: int = 3
+    step_up_ip_failures: int = 3
+    step_up_ip_window_s: int = 3600
     guide_path: Path = Path("data/camp-guide.md")
     stays_path: Path = Path("data/stays.json")

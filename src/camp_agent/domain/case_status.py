@@ -36,6 +36,12 @@ class CaseStatus:
             return self
         return replace(self, state=CaseState.PARKED, reason=reason)
 
+    def park_unverified(self) -> "CaseStatus":
+        # Failed verification parks held work too (I10); only a safety case stays held (I9).
+        if self.safety:
+            return self
+        return replace(self, state=CaseState.PARKED, reason=StateReason.VERIFICATION, held_at=None)
+
     def clarify(self, max_rounds: int, now: datetime) -> "CaseStatus":
         if self.clarify_rounds >= max_rounds:
             return self.hold(StateReason.CLARIFY_LIMIT, now)

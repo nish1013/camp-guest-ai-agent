@@ -13,6 +13,9 @@ class RecordingGraph:
     def __init__(self) -> None:
         self.batches: list[list[str]] = []
 
+    async def resume(self, case_id: int) -> None:
+        pass
+
     async def run(self, case_id: int, batch: list[PendingMessage]) -> None:
         self.batches.append([message.text for message in batch])
 

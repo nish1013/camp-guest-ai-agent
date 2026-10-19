@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from camp_agent.clock import Clock
 from camp_agent.db.case_repository import CaseRepository
 from camp_agent.db.message_repository import MessageRepository
+from camp_agent.db.task_repository import TaskRepository
+from camp_agent.domain.step_up import resumes_waiting
 from camp_agent.graph.triage_graph import TriageGraph
 
 
@@ -22,12 +24,13 @@ class RunCoordinator:
         owner = uuid4()
         while await self._claim(case_id, owner):
             try:
+                await self._graph.resume(case_id)
                 await self._run_pending(case_id)
             finally:
                 await self._release(case_id, owner)
-            # A message saved while this run held the lease found the case busy and did not start
-            # a run of its own, so it is picked up here.
-            if not await self._has_pending(case_id):
+            # A message or a step-up saved while this run held the lease found the case busy and
+            # did not start a run of its own, so it is picked up here.
+            if not await self._has_work(case_id):
                 return
 
     async def _run_pending(self, case_id: int) -> None:
@@ -51,6 +54,11 @@ class RunCoordinator:
         async with self._engine.begin() as conn:
             await CaseRepository(conn).release_run(case_id, owner)
 
-    async def _has_pending(self, case_id: int) -> bool:
+    async def _has_work(self, case_id: int) -> bool:
         async with self._engine.connect() as conn:
-            return await MessageRepository(conn).has_pending(case_id)
+            if await MessageRepository(conn).has_pending(case_id):
+                return True
+            case = await CaseRepository(conn).get(case_id)
+            if not resumes_waiting(case.status, case.scope):
+                return False
+            return await TaskRepository(conn).has_awaiting_scope(case_id)

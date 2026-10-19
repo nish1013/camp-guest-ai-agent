@@ -1,0 +1,8 @@
+<form id="step-up-form" hx-post="{{ case.link }}/step-up" hx-target="#case">
+  <p>To act on this, please confirm your booking.</p>
+  <label for="surname">Booking surname</label>
+  <input id="surname" name="surname" required maxlength="100" autocomplete="family-name">
+  <label for="booking_ref">Booking reference</label>
+  <input id="booking_ref" name="booking_ref" required maxlength="40" autocomplete="off">
+  <button type="submit">Confirm booking</button>
+</form>

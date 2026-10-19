@@ -33,6 +33,13 @@ def new_store(scope: Scope | None = C12) -> InMemoryTriageStore:
     return store
 
 
+def graph_for(
+    llm: FakeLlm, store: InMemoryTriageStore, guide: SwitchableGuide | None = None
+) -> LangGraphTriage:
+    answerer = GuideAnswerer(llm, guide or demo_guide(), RECEPTION)
+    return LangGraphTriage(llm, store, oct_19(), POLICY, answerer)
+
+
 async def triage(
     llm: FakeLlm,
     *texts: str,
@@ -40,8 +47,7 @@ async def triage(
     guide: SwitchableGuide | None = None,
 ) -> InMemoryTriageStore:
     store = store or new_store()
-    answerer = GuideAnswerer(llm, guide or demo_guide(), RECEPTION)
-    graph = LangGraphTriage(llm, store, oct_19(), POLICY, answerer)
+    graph = graph_for(llm, store, guide)
     for i, text in enumerate(texts, start=1):
         await graph.run(CASE, [PendingMessage(i, text)])
     return store

@@ -13,6 +13,7 @@ class StateReason(StrEnum):
     LLM_FAILED = "llm_failed"
     CLARIFY_LIMIT = "clarify_limit"
     SPAM = "spam"
+    VERIFICATION = "verification"
 
 
 LIVE_STATES = frozenset({CaseState.OPEN, CaseState.HELD, CaseState.PARKED})

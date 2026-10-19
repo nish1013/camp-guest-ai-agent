@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from camp_agent.domain.case_state import CaseState, StateReason
@@ -9,11 +11,21 @@ from camp_agent.domain.guest_status import (
     guest_status,
 )
 from camp_agent.domain.route_guard import Category, Route, TaskKind, TaskState
+from camp_agent.domain.scope import Scope, ScopeSource
 from camp_agent.domain.urgency import Urgency
 from camp_agent.graph.triage_types import StepRecord
 from camp_agent.llm.llm_types import Verdict
 from tests.fakes import FakeLlm, InMemoryTriageStore
-from tests.unit.triage_support import CASE, new_store, proposal, steps, triage
+from tests.unit.triage_support import (
+    C12,
+    CASE,
+    RECEPTION,
+    graph_for,
+    new_store,
+    proposal,
+    steps,
+    triage,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -36,7 +48,7 @@ async def test_us6_emergency_needs_no_llm(text: str) -> None:
         True,
     )
     assert status.urgency is Urgency.URGENT
-    assert guest_status(status, GUIDANCE) == GUIDANCE
+    assert guest_status(status, GUIDANCE, RECEPTION) == GUIDANCE
     assert [(t.kind, t.state) for t in store.tasks] == [(TaskKind.EMERGENCY, TaskState.HELD)]
     assert llm.calls == []
     assert steps(store) == ["safety:emergency"]
@@ -89,7 +101,7 @@ async def test_us8_money_held(intent: str, category: Category, route: Route) -> 
 
     status = store.status(CASE)
     assert (status.state, status.reason) == (CaseState.HELD, StateReason.MONEY)
-    assert guest_status(status, GUIDANCE) == WAITING_ON_RECEPTION
+    assert guest_status(status, GUIDANCE, RECEPTION) == WAITING_ON_RECEPTION
     assert [(t.kind, t.state) for t in store.tasks] == [(TaskKind.MONEY, TaskState.HELD)]
 
 
@@ -123,7 +135,7 @@ async def test_us10_nonsense_one_question() -> None:
 
     status = store.status(CASE)
     assert (status.state, status.clarify_rounds) == (CaseState.OPEN, 1)
-    assert guest_status(status, GUIDANCE) == CLARIFY
+    assert guest_status(status, GUIDANCE, RECEPTION) == CLARIFY
     assert store.tasks == []
     assert steps(store) == ["safety:clear", "verify:unclear", "clarify:asked"]
 
@@ -135,7 +147,7 @@ async def test_us2_held_after_2_rounds() -> None:
 
     status = store.status(CASE)
     assert (status.state, status.reason) == (CaseState.HELD, StateReason.CLARIFY_LIMIT)
-    assert guest_status(status, GUIDANCE) == WAITING_ON_RECEPTION
+    assert guest_status(status, GUIDANCE, RECEPTION) == WAITING_ON_RECEPTION
     assert [s for s in steps(store) if s.startswith("clarify")] == [
         "clarify:asked",
         "clarify:asked",
@@ -150,7 +162,7 @@ async def test_us2_clear_answer_resets_rounds() -> None:
 
     status = store.status(CASE)
     assert (status.state, status.clarify_rounds) == (CaseState.OPEN, 0)
-    assert guest_status(status, GUIDANCE) == RECEIVED
+    assert guest_status(status, GUIDANCE, RECEPTION) == RECEIVED
 
 
 async def test_us2_two_intents_two_tasks() -> None:
@@ -199,7 +211,7 @@ async def test_us2_llm_down_held() -> None:
 
     status = store.status(CASE)
     assert (status.state, status.reason) == (CaseState.HELD, StateReason.LLM_FAILED)
-    assert guest_status(status, GUIDANCE) == WITH_RECEPTION
+    assert guest_status(status, GUIDANCE, RECEPTION) == WITH_RECEPTION
     assert steps(store) == ["safety:clear", "llm_failed:held"]
     assert store.audit[-1].detail == {"failed_step": "verify"}
 
@@ -275,3 +287,52 @@ async def test_i10_park_between_read_and_write_kept() -> None:
     assert (status.state, status.reason) == (CaseState.PARKED, StateReason.SPAM)
     assert store.raced
     assert [s for s in steps(store) if s.startswith("route_guard")] == ["route_guard:money"]
+
+
+def with_scope(store: InMemoryTriageStore, scope: Scope) -> None:
+    store.cases[CASE] = replace(store.cases[CASE], scope=scope)
+
+
+async def test_us7_resume_queues_waiting_fault() -> None:
+    llm = FakeLlm(classes={"no hot water": HOT_WATER})
+    store = await triage(llm, "no hot water", store=new_store(scope=None))
+    with_scope(store, replace(C12, source=ScopeSource.STEP_UP))
+
+    await graph_for(llm, store).resume(CASE)
+
+    assert [(t.kind, t.state) for t in store.tasks] == [(TaskKind.FAULT, TaskState.QUEUED)]
+    assert store.audit[-1].step == "route_guard"
+    assert store.audit[-1].detail == {"step_id": "m1/t0", "state": "queued", "scope": "step_up"}
+    assert llm.calls == ["verify", "split", "classify"]
+
+
+@pytest.mark.parametrize("scope", [None, C12], ids=["no-scope", "parked"])
+async def test_us7_resume_needs_scope_not_parked(scope: Scope | None) -> None:
+    llm = FakeLlm(classes={"no hot water": HOT_WATER})
+    store = await triage(llm, "no hot water", store=new_store(scope=None))
+    if scope is not None:
+        with_scope(store, scope)
+        case = store.cases[CASE]
+        store.write_status(CASE, case.change(case.status.park_unverified()))
+    audited = len(store.audit)
+
+    await graph_for(llm, store).resume(CASE)
+
+    assert [t.state for t in store.tasks] == [TaskState.AWAITING_SCOPE]
+    assert len(store.audit) == audited
+
+
+async def test_us3_question_answered_beside_wait() -> None:
+    text = "no hot water, and when does the pool open?"
+    llm = FakeLlm(
+        splits={text: ["no hot water", "when does the pool open?"]},
+        classes={"no hot water": HOT_WATER},
+    )
+
+    store = await triage(llm, text, store=new_store(scope=None))
+
+    assert [(t.kind, t.state) for t in store.tasks] == [
+        (TaskKind.FAULT, TaskState.AWAITING_SCOPE),
+        (TaskKind.QUESTION, TaskState.QUEUED),
+    ]
+    assert len(store.answers) == 1

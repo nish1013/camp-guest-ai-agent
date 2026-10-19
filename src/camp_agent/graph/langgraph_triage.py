@@ -7,7 +7,8 @@ from langgraph.types import RetryPolicy
 from camp_agent.clock import Clock
 from camp_agent.domain.audit_entry import AuditEntry, AuditValue
 from camp_agent.domain.case_state import CaseState, StateReason
-from camp_agent.domain.route_guard import TaskKind, TaskState, guard_route
+from camp_agent.domain.route_guard import Route, TaskKind, TaskState, guard_route
+from camp_agent.domain.step_up import resumes_waiting
 from camp_agent.domain.urgency import Urgency
 from camp_agent.graph.guide_answerer import GuideAnswerer
 from camp_agent.graph.stale_case_error import StaleCaseError
@@ -18,6 +19,7 @@ from camp_agent.graph.triage_types import (
     StepRecord,
     TaskAnswer,
     TaskDraft,
+    TaskTransition,
     TriagePolicy,
 )
 from camp_agent.llm.llm_error import LlmError
@@ -88,6 +90,27 @@ class LangGraphTriage:
             "next": "",
         }
         await self._graph.ainvoke(start, {"recursion_limit": _RECURSION_LIMIT})
+
+    async def resume(self, case_id: int) -> None:
+        case = await self._store.load(case_id)
+        if case.scope is None or not resumes_waiting(case.status, case.scope):
+            return
+        for task in await self._store.awaiting_scope(case_id):
+            decision = guard_route(
+                task.category, Route(task.kind.value), True, self._policy.held_categories
+            )
+            detail: dict[str, AuditValue] = {
+                "step_id": task.step_id,
+                "state": decision.state,
+                "scope": case.scope.source,
+            }
+            await self._store.commit(
+                case_id,
+                StepRecord(
+                    AuditEntry(ROUTE_GUARD, decision.kind, detail),
+                    resumed=(TaskTransition(task.step_id, decision.state),),
+                ),
+            )
 
     async def _safety(self, state: TriageState) -> TriageUpdate:
         case = await self._store.load(state["case_id"])

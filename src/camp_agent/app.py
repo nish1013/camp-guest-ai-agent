@@ -28,11 +28,16 @@ from camp_agent.intake.find_open_case import FindOpenCase
 from camp_agent.intake.list_answers import ListAnswers
 from camp_agent.intake.rate_limiter import SlidingWindowLimiter
 from camp_agent.intake.run_coordinator import RunCoordinator
+from camp_agent.intake.step_up_form import StepUpForm
+from camp_agent.intake.step_up_types import StepUpLimits
 from camp_agent.intake.submit_message import SubmitMessage
+from camp_agent.intake.submit_step_up import SubmitStepUp
 from camp_agent.llm.llm_port import LlmPort
 from camp_agent.llm.pydantic_ai_llm import PydanticAiLlm
 from camp_agent.llm.retrying_llm import RetryingLlm
 from camp_agent.qr.qr_token import QrTokens
+from camp_agent.stay.seed_stays import SeedStays
+from camp_agent.stay.stay_port import StayContextPort
 
 
 def create_app(
@@ -41,6 +46,7 @@ def create_app(
     graph: TriageGraph | None = None,
     llm: LlmPort | None = None,
     guide: GuidePort | None = None,
+    stays: StayContextPort | None = None,
 ) -> FastAPI:
     resolved = settings or Settings()
     resolved_clock = clock or SystemClock(ZoneInfo(resolved.camp_timezone))
@@ -64,6 +70,12 @@ def create_app(
             TriagePolicy(safety, frozenset(resolved.held_categories), resolved.clarify_max_rounds),
             GuideAnswerer(retrying_llm, guide_port, guide_copy.reception),
         )
+        limits = StepUpLimits(
+            resolved.step_up_case_failures,
+            resolved.step_up_ip_failures,
+            timedelta(seconds=resolved.step_up_ip_window_s),
+        )
+        stay_port = stays or SeedStays(resolved.stays_path)
         app.state.health_probe = DatabaseProbe(engine)
         app.state.guest_services = GuestServices(
             settings=resolved,
@@ -76,6 +88,8 @@ def create_app(
             coordinator=RunCoordinator(
                 engine, triage, resolved_clock, timedelta(seconds=resolved.run_lease_s)
             ),
+            step_up=SubmitStepUp(engine, stay_port, resolved_clock, limits),
+            step_up_form=StepUpForm(engine, resolved.step_up_case_failures),
         )
         yield
         await engine.dispose()

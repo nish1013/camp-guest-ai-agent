@@ -1,3 +1,4 @@
+{% if reply %}<p data-reply>{{ reply }}</p>{% endif %}
 <p>Status: <strong data-status>{{ case.status }}</strong></p>
 {% for answer in case.answers %}
 <article data-answer>
@@ -6,4 +7,5 @@
   {% if answer.section_id %}<p><small>From the camp guide: <span data-cited>{{ answer.section_id }}</span></small></p>{% endif %}
 </article>
 {% endfor %}
+{% if case.step_up %}{% include "_step_up.html" %}{% endif %}
 <p><a href="{{ case.link }}" data-case-link>Your case link</a></p>
