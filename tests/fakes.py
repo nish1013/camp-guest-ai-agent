@@ -198,7 +198,7 @@ class SwitchableStays:
 
 
 def demo_stays() -> SwitchableStays:
-    return SwitchableStays(SeedStays(Settings().stays_path))
+    return SwitchableStays(SeedStays(Settings().stays_path, oct_19()))
 
 
 class FakeTickets:

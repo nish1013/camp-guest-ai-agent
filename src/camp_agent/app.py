@@ -122,7 +122,7 @@ def create_app(
             resolved.step_up_ip_failures,
             timedelta(seconds=resolved.step_up_ip_window_s),
         )
-        stay_port = stays or SeedStays(resolved.stays_path)
+        stay_port = stays or SeedStays(resolved.stays_path, resolved_clock)
         coordinator = RunCoordinator(
             engine, triage, resolved_clock, timedelta(seconds=resolved.run_lease_s)
         )
