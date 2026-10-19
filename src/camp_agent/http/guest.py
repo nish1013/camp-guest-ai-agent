@@ -27,6 +27,7 @@ from camp_agent.intake.find_case import FindCase
 from camp_agent.intake.intake_types import Accepted, SubmitMessageCommand
 from camp_agent.intake.list_answers import ListAnswers
 from camp_agent.intake.list_bookings import ListBookings
+from camp_agent.intake.list_declined import ListDeclined
 from camp_agent.intake.list_faults import ListFaults
 from camp_agent.intake.run_coordinator import RunCoordinator
 from camp_agent.intake.step_up_form import StepUpForm
@@ -58,6 +59,7 @@ class CaseView:
     answers: list[AnsweredQuestion]
     faults: CaseFaults
     bookings: list[BookingLine]
+    declined: list[str]
     step_up: bool
 
 
@@ -72,6 +74,7 @@ class GuestServices:
     list_answers: ListAnswers
     list_faults: ListFaults
     list_bookings: ListBookings
+    list_declined: ListDeclined
     coordinator: RunCoordinator
     step_up: SubmitStepUp
     step_up_form: StepUpForm
@@ -250,6 +253,7 @@ async def _view(case: CaseRecord, services: GuestServices) -> CaseView:
         answers=await services.list_answers(case.id),
         faults=await services.list_faults(case.id),
         bookings=await services.list_bookings(case.id),
+        declined=await services.list_declined(case.id),
         step_up=await services.step_up_form.shown(case),
     )
 

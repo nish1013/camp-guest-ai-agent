@@ -14,6 +14,20 @@ class TaskRef:
 
 
 @dataclass(frozen=True)
+class HeldTask:
+    step_id: str
+    kind: TaskKind
+    reported: bool
+
+
+@dataclass(frozen=True)
+class Resolution:
+    state: TaskState
+    category: Category | None = None
+    urgency: Urgency | None = None
+
+
+@dataclass(frozen=True)
 class StaffTask:
     id: int
     step_id: str

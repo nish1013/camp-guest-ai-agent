@@ -3,28 +3,34 @@ from pathlib import Path
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from camp_agent.config import Settings
+from camp_agent.domain.route_guard import Category
+from camp_agent.domain.urgency import Urgency
 from camp_agent.http.staff_auth import (
     LOGIN_PATH,
     STAFF_SESSION_KEY,
     credentials_match,
     require_staff,
 )
+from camp_agent.intake.run_coordinator import RunCoordinator
 from camp_agent.staff.list_queue import ListQueue
+from camp_agent.staff.resolve_as_human import ResolveAsHuman
+from camp_agent.staff.resolve_error import ResolveError
 from camp_agent.staff.set_booking_status import SetBookingStatus
 from camp_agent.staff.show_case import ShowCase
 from camp_agent.staff.staff_conflict_error import StaffConflictError
-from camp_agent.staff.staff_types import BookingDecision
+from camp_agent.staff.staff_types import BookingDecision, ResolveCommand
 
 QUEUE_PATH = "/staff/cases"
 LOGIN_REFUSED = "Wrong user name or password."
 CASE_CHANGED = "This case changed since you opened it. It has been reloaded."
 
 Version = Annotated[int, Form(ge=0)]
+StepId = Annotated[str | None, Form(pattern=r"^m\d+/(t\d+|emergency)$", max_length=40)]
 
 
 @dataclass(frozen=True)
@@ -34,6 +40,8 @@ class StaffServices:
     queue: ListQueue
     show_case: ShowCase
     booking_status: SetBookingStatus
+    resolve: ResolveAsHuman
+    coordinator: RunCoordinator
 
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
@@ -110,6 +118,34 @@ async def booking_status(
         return await _conflict(request, services, conflict)
     if case_id is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
+    return _to_case(case_id)
+
+
+@guarded.post("/cases/{case_id}/resolve", response_model=None)
+async def resolve(
+    request: Request,
+    background: BackgroundTasks,
+    services: Services,
+    case_id: int,
+    action: Annotated[Literal["approve", "reject"], Form()],
+    version: Version,
+    step_id: StepId = None,
+    category: Annotated[Category | None, Form()] = None,
+    urgency: Annotated[Urgency | None, Form()] = None,
+) -> HTMLResponse | RedirectResponse:
+    command = ResolveCommand(case_id, version, action == "approve", step_id, category, urgency)
+    try:
+        found = await services.resolve(command)
+    except StaffConflictError as conflict:
+        return await _conflict(request, services, conflict)
+    except ResolveError as error:
+        return await _case_page(
+            request, services, case_id, str(error), status.HTTP_422_UNPROCESSABLE_CONTENT
+        )
+    if not found:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    # An approved fault or table goes back into its lane, which a run picks up.
+    background.add_task(services.coordinator.drive, case_id)
     return _to_case(case_id)
 
 

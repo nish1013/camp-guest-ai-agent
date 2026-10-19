@@ -52,6 +52,12 @@ class CaseStatus:
     def understood(self) -> "CaseStatus":
         return replace(self, clarify_rounds=0)
 
+    def release(self) -> "CaseStatus":
+        # Staff settled the hold; the clarify count starts again for the next message.
+        if self.state is not CaseState.HELD:
+            return self
+        return replace(self, state=CaseState.OPEN, reason=None, held_at=None, clarify_rounds=0)
+
     def close(self, now: datetime) -> "CaseStatus":
         return replace(
             self,

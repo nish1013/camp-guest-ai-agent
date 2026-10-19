@@ -22,6 +22,22 @@
     <td>
       {% if task.ticket_ref %}{{ task.ticket_ref }}: {{ task.ticket_status }}{% endif %}
       {% if task.booking_party %}{{ task.booking_party }} at {{ task.booking_time.strftime("%H:%M") }} on {{ task.booking_date }}{% endif %}
+      {% if task.state == "held" %}
+      <form method="post" action="/staff/cases/{{ case.id }}/resolve" data-resolve-form>
+        <input type="hidden" name="version" value="{{ case.version }}">
+        <input type="hidden" name="step_id" value="{{ task.step_id }}">
+        {% if task.kind == "fault" %}
+        <select name="category" aria-label="Category">
+          {% for option in ["maintenance", "housekeeping"] %}<option{% if task.category == option %} selected{% endif %}>{{ option }}</option>{% endfor %}
+        </select>
+        <select name="urgency" aria-label="Urgency">
+          {% for option in ["urgent", "normal", "can_wait"] %}<option{% if task.urgency == option %} selected{% endif %}>{{ option }}</option>{% endfor %}
+        </select>
+        {% endif %}
+        <button type="submit" name="action" value="approve">Approve</button>
+        <button type="submit" name="action" value="reject">Reject</button>
+      </form>
+      {% endif %}
       {% if task.state == "booking_requested" %}
       <form method="post" action="/staff/bookings/{{ task.id }}/status" data-booking-form>
         <input type="hidden" name="version" value="{{ case.version }}">
@@ -33,6 +49,14 @@
   </tr>
   {% endfor %}
 </table>
+
+{% if case.status.state == "held" and not detail.tasks | selectattr("state", "equalto", "held") | list %}
+<form method="post" action="/staff/cases/{{ case.id }}/resolve" data-resolve-form>
+  <input type="hidden" name="version" value="{{ case.version }}">
+  <button type="submit" name="action" value="approve">Approve</button>
+  <button type="submit" name="action" value="reject">Reject</button>
+</form>
+{% endif %}
 
 <h2>Messages</h2>
 {% for message in detail.messages %}

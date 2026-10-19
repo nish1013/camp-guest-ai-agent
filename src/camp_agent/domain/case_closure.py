@@ -7,7 +7,14 @@ from camp_agent.domain.case_status import CaseStatus
 from camp_agent.domain.route_guard import TaskState
 from camp_agent.domain.ticket_status import CLOSED_TICKET_STATES, TicketStatus
 
-_FINISHED = frozenset({TaskState.DONE, TaskState.BOOKING_CONFIRMED, TaskState.BOOKING_DECLINED})
+_FINISHED = frozenset(
+    {
+        TaskState.DONE,
+        TaskState.BOOKING_CONFIRMED,
+        TaskState.BOOKING_DECLINED,
+        TaskState.REJECTED,
+    }
+)
 
 
 @dataclass(frozen=True)

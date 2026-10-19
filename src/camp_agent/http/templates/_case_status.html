@@ -13,6 +13,9 @@
 {% for line in case.bookings %}
 <p data-booking><em>{{ line.request }}</em>: {{ line.status }}</p>
 {% endfor %}
+{% for request in case.declined %}
+<p data-declined><em>{{ request }}</em>: Reception has declined this request</p>
+{% endfor %}
 {% for question in case.faults.questions %}{% include "_question.html" %}{% endfor %}
 {% if case.step_up %}{% include "_step_up.html" %}{% endif %}
 <p><a href="{{ case.link }}" data-case-link>Your case link</a></p>

@@ -6,8 +6,8 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from camp_agent.db.answered_question import AnsweredQuestion
-from camp_agent.db.staff_rows import StaffTask, TaskRef
-from camp_agent.db.tables import tasks
+from camp_agent.db.staff_rows import HeldTask, Resolution, StaffTask, TaskRef
+from camp_agent.db.tables import reports, tasks
 from camp_agent.domain.case_closure import TaskProgress
 from camp_agent.domain.fault_flow import ACTIONABLE, FaultTask
 from camp_agent.domain.fault_type import FaultType
@@ -132,6 +132,44 @@ class TaskRepository:
         query = select(tasks.c.case_id, tasks.c.step_id).where(tasks.c.id == task_id)
         row = (await self._conn.execute(query)).one_or_none()
         return None if row is None else TaskRef(row.case_id, row.step_id)
+
+    async def held(self, case_id: int) -> list[HeldTask]:
+        reported = exists().where(
+            reports.c.case_id == tasks.c.case_id, reports.c.step_id == tasks.c.step_id
+        )
+        query = (
+            select(tasks.c.step_id, tasks.c.kind, reported.label("reported"))
+            .where(tasks.c.case_id == case_id, tasks.c.state == TaskState.HELD)
+            .order_by(tasks.c.id)
+        )
+        rows = (await self._conn.execute(query)).all()
+        return [HeldTask(row.step_id, TaskKind(row.kind), row.reported) for row in rows]
+
+    async def resolve(self, case_id: int, step_id: str, resolution: Resolution) -> bool:
+        values: dict[str, Any] = {"state": resolution.state}
+        if resolution.category is not None:
+            values["category"] = resolution.category
+        if resolution.urgency is not None:
+            values["urgency"] = resolution.urgency
+        moved = await self._conn.execute(
+            update(tasks)
+            .where(
+                tasks.c.case_id == case_id,
+                tasks.c.step_id == step_id,
+                tasks.c.state == TaskState.HELD,
+            )
+            .values(values)
+            .returning(tasks.c.id)
+        )
+        return moved.one_or_none() is not None
+
+    async def rejected(self, case_id: int) -> list[str]:
+        query = (
+            select(tasks.c.summary)
+            .where(tasks.c.case_id == case_id, tasks.c.state == TaskState.REJECTED)
+            .order_by(tasks.c.id)
+        )
+        return list((await self._conn.execute(query)).scalars())
 
     async def for_staff(self, case_id: int) -> list[StaffTask]:
         query = select(tasks).where(tasks.c.case_id == case_id).order_by(tasks.c.id)

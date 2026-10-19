@@ -29,6 +29,7 @@ from camp_agent.http.staff import StaffServices
 from camp_agent.intake.find_case import FindCase
 from camp_agent.intake.list_answers import ListAnswers
 from camp_agent.intake.list_bookings import ListBookings
+from camp_agent.intake.list_declined import ListDeclined
 from camp_agent.intake.list_faults import ListFaults
 from camp_agent.intake.rate_limiter import SlidingWindowLimiter
 from camp_agent.intake.run_coordinator import RunCoordinator
@@ -42,6 +43,7 @@ from camp_agent.llm.pydantic_ai_llm import PydanticAiLlm
 from camp_agent.llm.retrying_llm import RetryingLlm
 from camp_agent.qr.qr_token import QrTokens
 from camp_agent.staff.list_queue import ListQueue
+from camp_agent.staff.resolve_as_human import ResolveAsHuman
 from camp_agent.staff.set_booking_status import SetBookingStatus
 from camp_agent.staff.show_case import ShowCase
 from camp_agent.stay.seed_stays import SeedStays
@@ -100,6 +102,9 @@ def create_app(
             timedelta(seconds=resolved.step_up_ip_window_s),
         )
         stay_port = stays or SeedStays(resolved.stays_path)
+        coordinator = RunCoordinator(
+            engine, triage, resolved_clock, timedelta(seconds=resolved.run_lease_s)
+        )
         app.state.health_probe = DatabaseProbe(engine)
         app.state.guest_services = GuestServices(
             settings=resolved,
@@ -117,9 +122,8 @@ def create_app(
             list_answers=ListAnswers(engine),
             list_faults=ListFaults(engine, ZoneInfo(resolved.camp_timezone)),
             list_bookings=ListBookings(engine),
-            coordinator=RunCoordinator(
-                engine, triage, resolved_clock, timedelta(seconds=resolved.run_lease_s)
-            ),
+            list_declined=ListDeclined(engine),
+            coordinator=coordinator,
             step_up=SubmitStepUp(engine, stay_port, resolved_clock, limits),
             step_up_form=StepUpForm(engine, resolved.step_up_case_failures),
             answer=SubmitAnswer(engine, resolved_clock),
@@ -131,6 +135,8 @@ def create_app(
             queue=ListQueue(engine, resolved_clock, desk, gate),
             show_case=ShowCase(engine, resolved_clock, desk, gate),
             booking_status=SetBookingStatus(engine, resolved_clock),
+            resolve=ResolveAsHuman(engine, resolved_clock),
+            coordinator=coordinator,
         )
         yield
         await engine.dispose()
