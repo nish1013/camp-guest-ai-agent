@@ -1,0 +1,2 @@
+class RestoreError(Exception):
+    pass

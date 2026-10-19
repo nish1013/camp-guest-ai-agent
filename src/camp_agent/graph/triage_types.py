@@ -54,6 +54,7 @@ class WaitingTask:
     step_id: str
     kind: TaskKind
     category: Category
+    summary: str
 
 
 @dataclass(frozen=True)
@@ -81,6 +82,8 @@ class TaskTransition:
     same_report_id: int | None = None
     ticket: TicketLink | None = None
     booking: TableBooking | None = None
+    # Set when the route changes the task's kind: a request with no active stay (D19).
+    kind: TaskKind | None = None
 
 
 @dataclass(frozen=True)

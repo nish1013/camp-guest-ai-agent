@@ -36,3 +36,10 @@ class ResolveCommand:
     step_id: str | None = None
     category: Category | None = None
     urgency: Urgency | None = None
+
+
+@dataclass(frozen=True)
+class RestoreCommand:
+    case_id: int
+    version: int
+    booking_ref: str | None = None

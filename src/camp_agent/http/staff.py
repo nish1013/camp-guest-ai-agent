@@ -20,16 +20,21 @@ from camp_agent.intake.run_coordinator import RunCoordinator
 from camp_agent.staff.list_queue import ListQueue
 from camp_agent.staff.resolve_as_human import ResolveAsHuman
 from camp_agent.staff.resolve_error import ResolveError
+from camp_agent.staff.restore_case import RestoreCase
+from camp_agent.staff.restore_error import RestoreError
 from camp_agent.staff.set_booking_status import SetBookingStatus
 from camp_agent.staff.show_case import ShowCase
 from camp_agent.staff.staff_conflict_error import StaffConflictError
-from camp_agent.staff.staff_types import BookingDecision, ResolveCommand
+from camp_agent.staff.staff_types import BookingDecision, ResolveCommand, RestoreCommand
+from camp_agent.stay.stay_error import StayError
 
 QUEUE_PATH = "/staff/cases"
 LOGIN_REFUSED = "Wrong user name or password."
 CASE_CHANGED = "This case changed since you opened it. It has been reloaded."
+BOOKINGS_DOWN = "The booking system cannot be reached. Try again shortly."
 
 Version = Annotated[int, Form(ge=0)]
+BookingRef = Annotated[str, Form(max_length=40)]
 StepId = Annotated[str | None, Form(pattern=r"^m\d+/(t\d+|emergency)$", max_length=40)]
 
 
@@ -41,6 +46,7 @@ class StaffServices:
     show_case: ShowCase
     booking_status: SetBookingStatus
     resolve: ResolveAsHuman
+    restore: RestoreCase
     coordinator: RunCoordinator
 
 
@@ -145,6 +151,35 @@ async def resolve(
     if not found:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
     # An approved fault or table goes back into its lane, which a run picks up.
+    background.add_task(services.coordinator.drive, case_id)
+    return _to_case(case_id)
+
+
+@guarded.post("/cases/{case_id}/restore", response_model=None)
+async def restore(
+    request: Request,
+    background: BackgroundTasks,
+    services: Services,
+    case_id: int,
+    version: Version,
+    booking_ref: BookingRef = "",
+) -> HTMLResponse | RedirectResponse:
+    command = RestoreCommand(case_id, version, booking_ref.strip() or None)
+    try:
+        found = await services.restore(command)
+    except StaffConflictError as conflict:
+        return await _conflict(request, services, conflict)
+    except RestoreError as error:
+        return await _case_page(
+            request, services, case_id, str(error), status.HTTP_422_UNPROCESSABLE_CONTENT
+        )
+    except StayError:
+        return await _case_page(
+            request, services, case_id, BOOKINGS_DOWN, status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+    if not found:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    # Triage runs again over the messages the park stopped (D33).
     background.add_task(services.coordinator.drive, case_id)
     return _to_case(case_id)
 

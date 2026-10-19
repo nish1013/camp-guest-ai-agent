@@ -68,13 +68,14 @@ class TaskRepository:
 
     async def awaiting_scope(self, case_id: int) -> list[WaitingTask]:
         query = (
-            select(tasks.c.step_id, tasks.c.kind, tasks.c.category)
+            select(tasks.c.step_id, tasks.c.kind, tasks.c.category, tasks.c.summary)
             .where(tasks.c.case_id == case_id, tasks.c.state == TaskState.AWAITING_SCOPE)
             .order_by(tasks.c.id)
         )
         rows = (await self._conn.execute(query)).all()
         return [
-            WaitingTask(row.step_id, TaskKind(row.kind), Category(row.category)) for row in rows
+            WaitingTask(row.step_id, TaskKind(row.kind), Category(row.category), row.summary)
+            for row in rows
         ]
 
     async def has_awaiting_scope(self, case_id: int) -> bool:
@@ -220,6 +221,10 @@ class TaskRepository:
 
     async def transition(self, case_id: int, transition: TaskTransition) -> bool:
         values: dict[str, Any] = {"state": transition.state}
+        if transition.kind is not None:
+            values["kind"] = transition.kind
+            if transition.kind is not TaskKind.FAULT:
+                values["fault_type"] = None
         if transition.same_report_id is not None:
             values["same_report_id"] = transition.same_report_id
         if transition.ticket is not None:

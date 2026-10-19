@@ -35,6 +35,8 @@ class TriageState(TypedDict):
     drafts: int
     rejected_for: list[str]
     report: SavedReport | None
+    restored: bool
+    parked: bool
 
 
 class TriageUpdate(TypedDict, total=False):
@@ -48,9 +50,12 @@ class TriageUpdate(TypedDict, total=False):
     drafts: int
     rejected_for: list[str]
     report: SavedReport | None
+    parked: bool
 
 
-def start_state(case_id: int, batch_key: str, text: str, entry: str) -> TriageState:
+def start_state(
+    case_id: int, batch_key: str, text: str, entry: str, restored: bool = False
+) -> TriageState:
     return {
         "case_id": case_id,
         "batch_key": batch_key,
@@ -65,4 +70,6 @@ def start_state(case_id: int, batch_key: str, text: str, entry: str) -> TriageSt
         "drafts": 0,
         "rejected_for": [],
         "report": None,
+        "restored": restored,
+        "parked": False,
     }

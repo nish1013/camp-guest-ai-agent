@@ -237,7 +237,7 @@ class InMemoryTriageStore:
         for move in step.transitions:
             for i, task in enumerate(self.tasks):
                 if task.step_id == move.step_id and task.state is move.expected:
-                    self.tasks[i] = replace(task, state=move.state)
+                    self.tasks[i] = replace(task, state=move.state, kind=move.kind or task.kind)
                     if move.ticket is not None:
                         self.tickets[task.step_id] = move.ticket
                     if move.same_report_id is not None:
@@ -312,7 +312,7 @@ class InMemoryTriageStore:
 
     async def awaiting_scope(self, case_id: int) -> list[WaitingTask]:
         return [
-            WaitingTask(task.step_id, task.kind, task.category)
+            WaitingTask(task.step_id, task.kind, task.category, task.summary)
             for task in self.tasks
             if task.state is TaskState.AWAITING_SCOPE and task.category is not None
         ]

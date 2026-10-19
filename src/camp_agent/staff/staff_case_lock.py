@@ -13,6 +13,7 @@ from camp_agent.domain.audit_entry import AuditEntry
 from camp_agent.domain.case_closure import TaskProgress
 from camp_agent.domain.case_status import CaseStatus
 from camp_agent.domain.run_lease import run_active
+from camp_agent.domain.scope import Scope
 from camp_agent.staff.staff_conflict_error import StaffConflictError
 
 
@@ -24,9 +25,14 @@ class StaffCase:
     async def progress(self) -> list[TaskProgress]:
         return await TaskRepository(self.conn).progress(self.case.id)
 
-    async def save(self, status: CaseStatus, audit: AuditEntry) -> None:
+    async def save(self, status: CaseStatus, audit: AuditEntry, scope: Scope | None = None) -> None:
         cases = CaseRepository(self.conn)
-        if not await cases.save_status(self.case.id, status, self.case.version):
+        version = self.case.version
+        if scope is not None:
+            if not await cases.set_scope(self.case.id, scope, version):
+                raise StaffConflictError(self.case.id)
+            version += 1
+        if not await cases.save_status(self.case.id, status, version):
             raise StaffConflictError(self.case.id)
         await AuditRepository(self.conn).insert(self.case.id, audit)
 

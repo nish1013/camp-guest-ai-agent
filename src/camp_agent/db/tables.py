@@ -48,6 +48,8 @@ messages = Table(
     Column("text", Text, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("handled_at", DateTime(timezone=True)),
+    Column("parked", Boolean, nullable=False),
+    Column("restored", Boolean, nullable=False),
 )
 
 tasks = Table(

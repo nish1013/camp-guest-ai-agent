@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from httpx2 import Response
 from sqlalchemy import Engine, text
 
-from camp_agent.graph.triage_graph import PendingMessage
+from camp_agent.graph.triage_graph import BatchOutcome, PendingMessage
 
 SECRET = "test-secret"
 
@@ -16,8 +16,9 @@ class RecordingGraph:
     async def resume(self, case_id: int) -> None:
         pass
 
-    async def run(self, case_id: int, batch: list[PendingMessage]) -> None:
+    async def run(self, case_id: int, batch: list[PendingMessage]) -> BatchOutcome:
         self.batches.append([message.text for message in batch])
+        return BatchOutcome.TRIAGED
 
 
 def send(client: TestClient, message: str, key: str | None = None) -> Response:

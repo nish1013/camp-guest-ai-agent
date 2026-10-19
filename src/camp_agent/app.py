@@ -44,6 +44,7 @@ from camp_agent.llm.retrying_llm import RetryingLlm
 from camp_agent.qr.qr_token import QrTokens
 from camp_agent.staff.list_queue import ListQueue
 from camp_agent.staff.resolve_as_human import ResolveAsHuman
+from camp_agent.staff.restore_case import RestoreCase
 from camp_agent.staff.set_booking_status import SetBookingStatus
 from camp_agent.staff.show_case import ShowCase
 from camp_agent.stay.seed_stays import SeedStays
@@ -136,6 +137,7 @@ def create_app(
             show_case=ShowCase(engine, resolved_clock, desk, gate),
             booking_status=SetBookingStatus(engine, resolved_clock),
             resolve=ResolveAsHuman(engine, resolved_clock),
+            restore=RestoreCase(engine, resolved_clock, stay_port),
             coordinator=coordinator,
         )
         yield

@@ -9,7 +9,7 @@ from camp_agent.db.message_repository import MessageRepository
 from camp_agent.db.task_repository import TaskRepository
 from camp_agent.domain.case_state import CaseState
 from camp_agent.domain.step_up import resumes_waiting
-from camp_agent.graph.triage_graph import TriageGraph
+from camp_agent.graph.triage_graph import BatchOutcome, TriageGraph, next_batch
 
 
 class RunCoordinator:
@@ -37,13 +37,16 @@ class RunCoordinator:
     async def _run_pending(self, case_id: int) -> None:
         while True:
             async with self._engine.connect() as conn:
-                batch = await MessageRepository(conn).pending(case_id)
-            if not batch:
+                pending = await MessageRepository(conn).pending(case_id)
+            if not pending:
                 return
-            await self._graph.run(case_id, batch)
+            batch = next_batch(pending)
+            outcome = await self._graph.run(case_id, batch)
             async with self._engine.begin() as conn:
                 await MessageRepository(conn).mark_handled(
-                    [message.id for message in batch], self._clock.now()
+                    [message.id for message in batch],
+                    self._clock.now(),
+                    parked=outcome is BatchOutcome.PARKED,
                 )
 
     async def _claim(self, case_id: int, owner: UUID) -> bool:

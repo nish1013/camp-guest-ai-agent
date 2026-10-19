@@ -27,8 +27,9 @@ async def write_step(conn: AsyncConnection, case_id: int, step: StepRecord) -> N
     await AuditRepository(conn).insert(case_id, step.audit)
     task_repository = TaskRepository(conn)
     await task_repository.insert(case_id, step.tasks)
-    await task_repository.save_answers(case_id, step.answers)
+    # A transition can make a task a question, which only then may hold an answer.
     for transition in step.transitions:
         await task_repository.transition(case_id, transition)
+    await task_repository.save_answers(case_id, step.answers)
     if step.validation is not None:
         await ValidationRepository(conn).insert(case_id, step.validation)

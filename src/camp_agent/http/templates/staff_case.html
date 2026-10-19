@@ -58,6 +58,17 @@
 </form>
 {% endif %}
 
+{% if case.status.state == "parked" %}
+<form method="post" action="/staff/cases/{{ case.id }}/restore" data-restore-form>
+  <input type="hidden" name="version" value="{{ case.version }}">
+  {% if not case.scope %}
+  <label for="booking_ref">Booking reference, confirmed by phone{% if case.status.reason != "verification" %} (optional){% endif %}</label>
+  <input id="booking_ref" name="booking_ref" maxlength="40" autocomplete="off"{% if case.status.reason == "verification" %} required{% endif %}>
+  {% endif %}
+  <button type="submit">Restore</button>
+</form>
+{% endif %}
+
 <h2>Messages</h2>
 {% for message in detail.messages %}
 <p data-message><small>{{ message.created_at.astimezone(tz).strftime("%d %b %H:%M") }}</small> {{ message.text }}</p>

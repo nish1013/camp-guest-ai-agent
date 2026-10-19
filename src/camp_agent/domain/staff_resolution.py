@@ -1,5 +1,18 @@
+from collections.abc import Sequence
+
+from camp_agent.domain.case_state import StateReason
 from camp_agent.domain.route_guard import Category, TaskKind, TaskState
+from camp_agent.domain.scope import Scope, ScopeSource
 from camp_agent.domain.specialist import specialist_for
+from camp_agent.stay.stay_types import Booking
+
+_HELD_REASON = {
+    TaskKind.EMERGENCY: StateReason.EMERGENCY,
+    TaskKind.MONEY: StateReason.MONEY,
+    TaskKind.FAULT: StateReason.FAULT_REVIEW,
+    TaskKind.TABLE: StateReason.BOOKING_REVIEW,
+    TaskKind.QUESTION: StateReason.LLM_FAILED,
+}
 
 
 def approved_state(kind: TaskKind, reported: bool) -> TaskState:
@@ -21,3 +34,13 @@ def edit_errors(kind: TaskKind, category: Category | None, edited: bool) -> list
     if category is not None and specialist_for(category) is None:
         return [f"no specialist for {category}"]
     return []
+
+
+def restored_hold(held: Sequence[TaskKind]) -> StateReason | None:
+    # A park keeps no hold reason (I10), so a restore takes it from the first held task.
+    return _HELD_REASON[held[0]] if held else None
+
+
+def staff_scope(booking: Booking) -> Scope:
+    # Staff confirmed the booking by phone, so it sets the scope (D33, I7).
+    return Scope(booking.cabin, booking.stay_from, booking.stay_to, ScopeSource.STAFF)

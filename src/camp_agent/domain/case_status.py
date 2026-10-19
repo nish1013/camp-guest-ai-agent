@@ -52,6 +52,14 @@ class CaseStatus:
     def understood(self) -> "CaseStatus":
         return replace(self, clarify_rounds=0)
 
+    def restore(self, held: StateReason | None, now: datetime) -> "CaseStatus":
+        # A staff restore ends the park (D33); work still held goes back to staff.
+        if self.state is not CaseState.PARKED:
+            return self
+        if held is None:
+            return replace(self, state=CaseState.OPEN, reason=None, held_at=None)
+        return replace(self, state=CaseState.HELD, reason=held, held_at=now)
+
     def release(self) -> "CaseStatus":
         # Staff settled the hold; the clarify count starts again for the next message.
         if self.state is not CaseState.HELD:
