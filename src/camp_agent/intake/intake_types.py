@@ -12,6 +12,7 @@ class SubmitMessageCommand:
     case_token: str | None
     scope: Scope | None
     client_ip: str
+    qr_invalid: bool = False
 
 
 @dataclass(frozen=True)

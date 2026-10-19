@@ -59,7 +59,7 @@ def create_app(
             settings=resolved,
             clock=resolved_clock,
             qr_tokens=QrTokens(resolved.secret_key),
-            submit=SubmitMessage(engine, limiter, resolved_clock),
+            submit=SubmitMessage(engine, limiter, resolved_clock, safety),
             find_open_case=FindOpenCase(engine),
             coordinator=RunCoordinator(
                 engine, triage, resolved_clock, timedelta(seconds=resolved.run_lease_s)

@@ -22,6 +22,7 @@ from camp_agent.qr.qr_token import QrOutcome, QrTokens
 
 CASE_COOKIE = "case_token"
 QR_SESSION_KEY = "qr_token"
+QR_INVALID_KEY = "qr_invalid"
 RATE_LIMITED_REPLY = "Please try again in a few minutes"
 
 MessageText = Annotated[
@@ -72,6 +73,10 @@ async def open_from_qr(request: Request, qr_token: str, services: Services) -> H
         request.session.pop(QR_SESSION_KEY, None)
     if reading.outcome is QrOutcome.INVALID:
         log.warning("invalid QR token")
+        # No case exists yet, so the audit entry is written on the case of the next message.
+        request.session[QR_INVALID_KEY] = True
+    else:
+        request.session.pop(QR_INVALID_KEY, None)
     return await _page(request, services)
 
 
@@ -90,6 +95,7 @@ async def submit_message(
             case_token=request.cookies.get(CASE_COOKIE),
             scope=_scope(request, services),
             client_ip=request.client.host if request.client else "unknown",
+            qr_invalid=bool(request.session.get(QR_INVALID_KEY)),
         )
     )
     if not isinstance(result, Accepted):
@@ -100,6 +106,7 @@ async def submit_message(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
         )
     if not result.replayed:
+        request.session.pop(QR_INVALID_KEY, None)
         background.add_task(services.coordinator.drive, result.case.id)
     response = templates.TemplateResponse(
         request,
