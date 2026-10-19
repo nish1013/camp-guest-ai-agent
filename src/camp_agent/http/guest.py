@@ -20,6 +20,7 @@ from camp_agent.domain.guest_status import (
     NO_BOOKING_MATCH,
     guest_status,
 )
+from camp_agent.domain.quick_pick import QuickPick
 from camp_agent.domain.scope import Scope
 from camp_agent.guide.guide_types import GuideCopy
 from camp_agent.intake.answer_types import AnswerCommand, BookingLine, CaseFaults
@@ -83,6 +84,7 @@ class GuestServices:
 
 log = logging.getLogger(__name__)
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+templates.env.globals["picks"] = list(QuickPick)
 router = APIRouter()
 
 
@@ -123,6 +125,7 @@ async def submit_message(
     text: Annotated[MessageText, Form()],
     idempotency_key: Annotated[UUID, Form()],
     cabin_hint: Annotated[CabinHint, Form()] = "",
+    pick: Annotated[QuickPick | None, Form()] = None,
 ) -> HTMLResponse:
     if cabin_hint:
         request.session[CABIN_HINT_KEY] = cabin_hint
@@ -134,6 +137,7 @@ async def submit_message(
             scope=_scope(request, services),
             client_ip=_client_ip(request),
             qr_invalid=bool(request.session.get(QR_INVALID_KEY)),
+            pick=pick,
         )
     )
     if not isinstance(result, Accepted):

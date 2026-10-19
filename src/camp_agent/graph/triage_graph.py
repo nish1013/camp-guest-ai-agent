@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
+from camp_agent.domain.quick_pick import QuickPick
+
 
 @dataclass(frozen=True)
 class PendingMessage:
@@ -9,6 +11,8 @@ class PendingMessage:
     text: str
     # Queued again by a staff restore of a spam park: the spam verdict is overridden (D33).
     restored: bool = False
+    # The topic tapped with a new request: a hint for classify, never the route (D51).
+    pick: QuickPick | None = None
 
 
 class BatchOutcome(StrEnum):

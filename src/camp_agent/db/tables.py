@@ -50,6 +50,7 @@ messages = Table(
     Column("handled_at", DateTime(timezone=True)),
     Column("parked", Boolean, nullable=False),
     Column("restored", Boolean, nullable=False),
+    Column("pick", Text),
 )
 
 tasks = Table(

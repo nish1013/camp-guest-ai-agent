@@ -1,4 +1,10 @@
 <form id="message-form" hx-post="/messages" hx-target="#case"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <fieldset class="picks">
+    <legend>What is it about? (optional)</legend>
+    {% for pick in picks %}
+    <label class="pick"><input type="radio" name="pick" value="{{ pick.value }}"> {{ pick.label }}</label>
+    {% endfor %}
+  </fieldset>
   <label for="text">How can we help?</label>
   <textarea id="text" name="text" required maxlength="2000"></textarea>
   {% if not scope %}

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from camp_agent.db.staff_rows import StaffMessage
 from camp_agent.db.tables import messages
+from camp_agent.domain.quick_pick import QuickPick
 from camp_agent.graph.triage_graph import PendingMessage
 
 
@@ -19,10 +20,12 @@ class MessageRepository:
         case_id: int | None = (await self._conn.execute(query)).scalar_one_or_none()
         return case_id
 
-    async def insert(self, idempotency_key: UUID, case_id: int, text: str) -> bool:
+    async def insert(
+        self, idempotency_key: UUID, case_id: int, text: str, pick: QuickPick | None = None
+    ) -> bool:
         inserted = await self._conn.execute(
             insert(messages)
-            .values(idempotency_key=idempotency_key, case_id=case_id, text=text)
+            .values(idempotency_key=idempotency_key, case_id=case_id, text=text, pick=pick)
             .on_conflict_do_nothing(index_elements=["idempotency_key"])
             .returning(messages.c.id)
         )
@@ -30,12 +33,17 @@ class MessageRepository:
 
     async def pending(self, case_id: int) -> list[PendingMessage]:
         query = (
-            select(messages.c.id, messages.c.text, messages.c.restored)
+            select(messages.c.id, messages.c.text, messages.c.restored, messages.c.pick)
             .where(messages.c.case_id == case_id, messages.c.handled_at.is_(None))
             .order_by(messages.c.id)
         )
         rows = (await self._conn.execute(query)).all()
-        return [PendingMessage(row.id, row.text, row.restored) for row in rows]
+        return [
+            PendingMessage(
+                row.id, row.text, row.restored, None if row.pick is None else QuickPick(row.pick)
+            )
+            for row in rows
+        ]
 
     async def for_staff(self, case_id: int) -> list[StaffMessage]:
         query = (

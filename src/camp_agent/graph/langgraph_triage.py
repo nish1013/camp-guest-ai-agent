@@ -81,7 +81,10 @@ class LangGraphTriage:
     async def run(self, case_id: int, batch: list[PendingMessage]) -> BatchOutcome:
         text = "\n".join(message.text for message in batch)
         restored = any(message.restored for message in batch)
-        final = await self._invoke(start_state(case_id, f"m{batch[0].id}", text, SAFETY, restored))
+        pick = next((message.pick for message in batch if message.pick is not None), None)
+        final = await self._invoke(
+            start_state(case_id, f"m{batch[0].id}", text, SAFETY, restored, pick)
+        )
         return BatchOutcome.PARKED if final["parked"] else BatchOutcome.TRIAGED
 
     async def resume(self, case_id: int) -> None:
@@ -231,7 +234,7 @@ class LangGraphTriage:
     async def _classify(self, state: TriageState) -> TriageUpdate:
         intent = state["intents"][state["index"]]
         try:
-            proposal = await self._llm.classify(intent)
+            proposal = await self._llm.classify(intent, state["pick"])
         except LlmError:
             return {"next": LLM_FAILED, "failed_step": CLASSIFY}
         detail: dict[str, AuditValue] = {
@@ -239,6 +242,8 @@ class LangGraphTriage:
             "category": proposal.category,
             "urgency": proposal.urgency,
         }
+        if state["pick"] is not None:
+            detail["pick"] = state["pick"]
         await self._commit(state, AuditEntry(CLASSIFY, proposal.route, detail))
         return {"next": ROUTE_GUARD, "classification": proposal}
 

@@ -12,6 +12,7 @@ from camp_agent.domain.case_state import CaseState
 from camp_agent.domain.case_status import CaseStatus
 from camp_agent.domain.fault_flow import FaultTask
 from camp_agent.domain.fault_type import FaultType
+from camp_agent.domain.quick_pick import QuickPick
 from camp_agent.domain.route_guard import Category, Route, TaskKind, TaskState
 from camp_agent.domain.scope import Scope
 from camp_agent.domain.specialist import Team
@@ -129,6 +130,7 @@ class FakeLlm:
         self.calls: list[str] = []
         self.inputs: list[str] = []
         self.offered: list[str] = []
+        self.hints: list[QuickPick | None] = []
 
     async def verify(self, text: str) -> Verdict:
         self._call("verify", text)
@@ -138,8 +140,9 @@ class FakeLlm:
         self._call("split", text)
         return self._splits.get(text, [text])
 
-    async def classify(self, intent: str) -> Classification:
+    async def classify(self, intent: str, hint: QuickPick | None = None) -> Classification:
         self._call("classify", intent)
+        self.hints.append(hint)
         return self._classes.get(intent, QUESTION)
 
     async def answer(self, question: str, sections: Sequence[GuideSection]) -> GuideAnswer:
