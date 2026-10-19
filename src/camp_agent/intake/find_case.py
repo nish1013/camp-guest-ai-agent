@@ -12,3 +12,8 @@ class FindCase:
     async def __call__(self, case_token: str) -> CaseRecord | None:
         async with self._engine.connect() as conn:
             return await CaseRepository(conn).find_by_token(case_token)
+
+    # The case a returning guest may add to (D4). A closed case is never offered.
+    async def open(self, case_token: str) -> CaseRecord | None:
+        async with self._engine.connect() as conn:
+            return await CaseRepository(conn).find_open_by_token(case_token)

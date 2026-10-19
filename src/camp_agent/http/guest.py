@@ -51,6 +51,8 @@ CabinHint = Annotated[str, StringConstraints(strip_whitespace=True, max_length=1
 Surname = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 BookingRef = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]
 Subject = Annotated[str, StringConstraints(pattern=r"^m\d+(/t\d+)?$", max_length=40)]
+CaseToken = Annotated[str, StringConstraints(min_length=1, max_length=64)]
+Target = Literal["case", "new"]
 
 
 @dataclass(frozen=True)
@@ -62,6 +64,12 @@ class CaseView:
     bookings: list[BookingLine]
     declined: list[str]
     step_up: bool
+
+
+@dataclass(frozen=True)
+class CaseOffer:
+    token: str
+    label: str
 
 
 @dataclass(frozen=True)
@@ -126,14 +134,18 @@ async def submit_message(
     idempotency_key: Annotated[UUID, Form()],
     cabin_hint: Annotated[CabinHint, Form()] = "",
     pick: Annotated[QuickPick | None, Form()] = None,
+    target: Annotated[Target | None, Form()] = None,
+    offered: Annotated[CaseToken | None, Form()] = None,
 ) -> HTMLResponse:
+    if target == "case" and offered is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT)
     if cabin_hint:
         request.session[CABIN_HINT_KEY] = cabin_hint
     result = await services.submit(
         SubmitMessageCommand(
             text=text,
             idempotency_key=idempotency_key,
-            case_token=request.cookies.get(CASE_COOKIE),
+            case_token=_case_to_join(request, target, offered),
             scope=_scope(request, services),
             client_ip=_client_ip(request),
             qr_invalid=bool(request.session.get(QR_INVALID_KEY)),
@@ -156,6 +168,7 @@ async def submit_message(
         {
             "case": await _view(result.case, services),
             "scope": _scope(request, services),
+            "offer": await _offer(result.case.case_token, services),
             "next_key": uuid4(),
         },
     )
@@ -227,18 +240,39 @@ async def answer(
 
 async def _page(request: Request, services: GuestServices) -> HTMLResponse:
     case = None
+    offer = None
     token = request.cookies.get(CASE_COOKIE)
     if token is not None:
         case = await services.find_case(token)
+        offer = await _offer(token, services)
     return templates.TemplateResponse(
         request,
         "index.html",
         {
             "scope": _scope(request, services),
             "case": None if case is None else await _view(case, services),
+            "offer": offer,
             "next_key": uuid4(),
         },
     )
+
+
+def _case_to_join(request: Request, target: Target | None, offered: str | None) -> str | None:
+    # The form names the case it offered, so a second tab that opened a new case since does
+    # not redirect the message. With no choice made, the cookie case is joined (D20).
+    if target == "new":
+        return None
+    if target == "case":
+        return offered
+    return request.cookies.get(CASE_COOKIE)
+
+
+async def _offer(case_token: str, services: GuestServices) -> CaseOffer | None:
+    case = await services.find_case.open(case_token)
+    if case is None:
+        return None
+    label = "your request" if case.scope is None else case.scope.cabin
+    return CaseOffer(case.case_token, label)
 
 
 def _scope(request: Request, services: GuestServices) -> Scope | None:
