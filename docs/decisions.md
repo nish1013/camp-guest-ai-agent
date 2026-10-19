@@ -90,3 +90,12 @@
 | D44 | tech | One graph step commits one aggregate. US4 saves the report in one step and the task's ticket in the next. | One aggregate per transaction. The checkpointer resumes from the last committed step (D5). | Save the report and the task together: two aggregates in one transaction, one lock waits on another. | A crash between the steps resumes at step 2. The report's unique `(case_id, step_id)` stops a second insert. |
 | D45 | tech | I12 uses an in-process handler on an outbox. The handler ignores a version at or below the stored one. No inbox. No broker. | One service, one database. A version makes repeats and out-of-order events harmless. | Broker: an extra service for one event. Inbox table: duplicates the version check and needs a cleanup cron. | Real ticket adapters must send a version or an updated-at that increases. |
 | D46 | tech | I2 uses a run lease on the case row, claimed by a conditional update and expiring after a set time. Messages are saved without the lease. | A database lock held during an LLM call blocks for seconds. A message must never wait on a run (D6). | Row lock for the whole run: long locks, a blocked message intake. | A crashed run frees the case when its lease expires. Lease length in config. |
+
+## 2026-10-19 — plan
+
+| # | Kind | Decision | Why | Alternatives considered | Consequence |
+|---|---|---|---|---|---|
+| D47 | tech | Server-rendered UI: FastAPI + Jinja + HTMX. Status by SSE. | One deployable and no Node build keep "clone, compose, one key". Plain HTML works on a phone. | React SPA: a second build and a JSON API for one small UI. | UI interactions are limited to what HTMX does well. Enough for forms and a live status line. |
+| D48 | tech | `LlmPort` uses Pydantic AI with the OpenAI provider. The model name comes from `.env`. | Output is parsed into Pydantic models, which D15 needs. The provider is config, not code. | Raw OpenAI SDK: hand-written parsing. LangChain chat models: a second abstraction beside LangGraph. | One `OPENAI_API_KEY` runs the demo. |
+| D49 | tech | Evals run only by hand, `make evals`. Not in CI. | Evals cost tokens and depend on the model. CI stays free and deterministic. | Evals in CI with a secret key: cost on every push and flaky runs. | Run evals before merging a change to a prompt or the graph. |
+| D50 | tech | Postgres 16. | I4 needs a transaction lock on the cabin id. LangGraph has a Postgres checkpointer. | SQLite: no advisory lock, weak concurrent writes. | Compose runs a Postgres service. Integration tests use testcontainers. |
