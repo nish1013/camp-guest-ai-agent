@@ -87,3 +87,10 @@ Plan:     domain.md, Words used: "Fault type: A closed list in config".
 Built:    `FaultType` in `domain/fault_type.py`. Classify proposes it; a `CHECK` on `tasks` and `reports` holds the same list.
 Why:      the LLM output schema carries the list, so the LLM cannot return a type outside it (D15, D48). A list in config would need the schema built at start-up, and no story asks to change the list.
 Undo:     move the values to `Settings` and build the classification schema from them at start-up.
+
+## D13. The ticket step holds the case row from the park check to the commit (PR 6, 2026-10-19)
+
+Plan:     domain.md, I8: "case root; version number on the case". The hard part names one lock: the cabin lock for I4.
+Built:    after the args pass validation, the ticket step locks the case row (`FOR NO KEY UPDATE`), checks the case is not parked, calls `TicketPort.create`, and saves the ticket in that transaction. The LLM draft runs before the lock.
+Why:      the version check alone rejects the ticket row on a parked case, but `create` has already sent the ticket. Every park is an `UPDATE` of the case row, so it now waits for the commit and then loses the version check. A park that commits first is seen before `create`. The lock covers one aggregate and no LLM call, so D44 and D46 hold. The create stays keyed by case and step (I3).
+Undo:     drop `lock_case` and save the ticket with the version check alone; a park between `create` and the commit then leaves a ticket sent for a parked case.
