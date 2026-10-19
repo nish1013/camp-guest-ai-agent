@@ -10,7 +10,7 @@ from testcontainers.community.postgres import PostgresContainer
 
 from camp_agent.app import create_app
 from camp_agent.config import Settings
-from tests.fakes import FakeClock, FakeLlm, oct_19
+from tests.fakes import FakeClock, FakeLlm, SwitchableGuide, demo_guide, oct_19
 from tests.integration.intake_support import SECRET, RecordingGraph
 
 
@@ -50,16 +50,21 @@ def graph() -> RecordingGraph:
 
 
 @pytest.fixture
+def guide() -> SwitchableGuide:
+    return demo_guide()
+
+
+@pytest.fixture
 def clock() -> FakeClock:
     return oct_19()
 
 
 @pytest.fixture
 def client(
-    db: Engine, migrated_url: str, graph: RecordingGraph, clock: FakeClock
+    db: Engine, migrated_url: str, graph: RecordingGraph, clock: FakeClock, guide: SwitchableGuide
 ) -> Iterator[TestClient]:
     settings = Settings(database_url=migrated_url, secret_key=SECRET)
-    with TestClient(create_app(settings, clock=clock, graph=graph)) as test_client:
+    with TestClient(create_app(settings, clock=clock, graph=graph, guide=guide)) as test_client:
         yield test_client
 
 
@@ -70,8 +75,8 @@ def llm() -> FakeLlm:
 
 @pytest.fixture
 def triage_client(
-    db: Engine, migrated_url: str, llm: FakeLlm, clock: FakeClock
+    db: Engine, migrated_url: str, llm: FakeLlm, clock: FakeClock, guide: SwitchableGuide
 ) -> Iterator[TestClient]:
     settings = Settings(database_url=migrated_url, secret_key=SECRET, llm_retry_delay_s=0)
-    with TestClient(create_app(settings, clock=clock, llm=llm)) as test_client:
+    with TestClient(create_app(settings, clock=clock, llm=llm, guide=guide)) as test_client:
         yield test_client

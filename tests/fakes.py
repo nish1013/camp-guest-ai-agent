@@ -2,12 +2,17 @@ from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from camp_agent.config import Settings
 from camp_agent.domain.audit_entry import AuditEntry
 from camp_agent.domain.case_status import CaseStatus
 from camp_agent.domain.route_guard import Category, Route
 from camp_agent.domain.scope import Scope
 from camp_agent.domain.urgency import Urgency
 from camp_agent.graph.triage_types import CaseSnapshot, StepRecord, TaskDraft
+from camp_agent.guide.guide_error import GuideError
+from camp_agent.guide.guide_port import GuidePort
+from camp_agent.guide.guide_types import GuideSection
+from camp_agent.guide.markdown_guide import MarkdownGuide, parse_guide
 from camp_agent.llm.llm_error import LlmError
 from camp_agent.llm.llm_types import Classification, Verdict
 
@@ -33,6 +38,32 @@ class FakeClock:
 
 def oct_19(hour: int = 14) -> FakeClock:
     return FakeClock(datetime(2026, 10, 19, hour, tzinfo=CAMP_TZ).astimezone(UTC))
+
+
+class SwitchableGuide:
+    def __init__(self, inner: GuidePort) -> None:
+        self._inner = inner
+        self.down = False
+
+    async def search(self, question: str) -> list[GuideSection]:
+        self._check()
+        return await self._inner.search(question)
+
+    async def section(self, section_id: str) -> GuideSection | None:
+        self._check()
+        return await self._inner.section(section_id)
+
+    def _check(self) -> None:
+        if self.down:
+            raise GuideError("down")
+
+
+def demo_guide() -> SwitchableGuide:
+    return SwitchableGuide(MarkdownGuide(Settings().guide_path))
+
+
+def demo_section(section_id: str) -> GuideSection:
+    return parse_guide(Settings().guide_path.read_text(encoding="utf-8"))[section_id]
 
 
 class FakeLlm:

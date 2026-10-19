@@ -18,6 +18,9 @@ from camp_agent.domain.safety_rule import SafetyRule
 from camp_agent.graph.langgraph_triage import LangGraphTriage
 from camp_agent.graph.triage_graph import TriageGraph
 from camp_agent.graph.triage_types import TriagePolicy
+from camp_agent.guide.guide_copy import copy_from_guide
+from camp_agent.guide.guide_port import GuidePort
+from camp_agent.guide.markdown_guide import MarkdownGuide
 from camp_agent.http import guest, health
 from camp_agent.http.guest import GuestServices
 from camp_agent.intake.find_open_case import FindOpenCase
@@ -35,6 +38,7 @@ def create_app(
     clock: Clock | None = None,
     graph: TriageGraph | None = None,
     llm: LlmPort | None = None,
+    guide: GuidePort | None = None,
 ) -> FastAPI:
     resolved = settings or Settings()
     resolved_clock = clock or SystemClock(ZoneInfo(resolved.camp_timezone))
@@ -42,6 +46,8 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        guide_port = guide or MarkdownGuide(resolved.guide_path)
+        guide_copy = await copy_from_guide(guide_port)
         engine = make_engine(resolved)
         limiter = SlidingWindowLimiter(
             resolved.rate_limit_messages, timedelta(seconds=resolved.rate_limit_window_s)
@@ -58,6 +64,7 @@ def create_app(
         app.state.guest_services = GuestServices(
             settings=resolved,
             clock=resolved_clock,
+            guide_copy=guide_copy,
             qr_tokens=QrTokens(resolved.secret_key),
             submit=SubmitMessage(engine, limiter, resolved_clock, safety),
             find_open_case=FindOpenCase(engine),
