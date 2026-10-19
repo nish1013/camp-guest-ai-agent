@@ -27,3 +27,4 @@ class Settings(BaseSettings):
     held_categories: list[str] = ["refund", "compensation", "cabin_move", "safety_close_out"]
     clarify_max_rounds: int = 2
     guide_path: Path = Path("data/camp-guide.md")
+    stays_path: Path = Path("data/stays.json")
