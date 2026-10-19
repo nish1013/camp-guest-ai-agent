@@ -3,7 +3,7 @@
 One Python app: FastAPI serves a phone-first web UI and runs a LangGraph triage graph over ports.
 Docker Compose runs it with Postgres and demo adapters. One OpenAI API key is the only secret.
 
-Status: locked, 2026-10-19
+Status: locked, 2026-10-19. Amended 2026-10-19 (A1).
 
 ## Context
 
@@ -159,8 +159,11 @@ Each PR is from fresh `main` and green in CI before the next starts.
 8. **`feat/staff-view`**: login, queue, overdue, parked list, resolve, restore, ticket and booking
    status, outbox handler, case close and reopen.
    **Accept when:** US11-US14 pass; I11 and I12 pass; a staff action during a run gets 409.
-9. **`feat/guest-status-page`**: case page, SSE, every status template, desk hours.
-   **Accept when:** US9 passes on a 375 px viewport with no horizontal scroll.
+9. **`feat/guest-status-page`**: case page, SSE, every status template, desk hours. The
+   "Add to C12 or new request?" prompt and the quick picks (A1).
+   **Accept when:** US9 passes on a 375 px viewport with no horizontal scroll. A returning guest
+   with an open case sees the prompt; "New request" opens a new case; a pick reaches the LLM as a
+   hint only and a refund under "Question" is still held (D36).
 10. **`feat/evals`**: Pydantic Evals datasets and `make evals`.
     **Accept when:** `make evals` with a key passes every case; a planted cross-cabin arg fails it.
 11. **`docs/readme`**: README with the demo walk-through and how to write a real adapter.
@@ -177,6 +180,14 @@ make evals          by hand, needs OPENAI_API_KEY
 docker compose up   then the README walk-through
 ```
 
+## Amendments
+
+Changes made after the lock. Each one is dated and names the decision it carries.
+
+| Id | Date | Change | Decision | Why |
+| --- | --- | --- | --- | --- |
+| A1 | 2026-10-19 | PR 9 adds the "Add to C12 or new request?" prompt and the quick picks. | D4 (amended), D51 | A spam verdict on a follow-up parked a case with an open ticket, against I8. Found in the PR 6 build. |
+
 ## Deviations
 
-None yet.
+See [plan-deviations.md](plan-deviations.md).
