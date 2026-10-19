@@ -58,3 +58,16 @@
 | D27 | product | Page the duty manager when the human gate times out. | **F9.** Needs a paging integration. | v1 flags overdue in the staff view. | Overnight delays depend on staff checking the view. |
 | D28 | tech | Push updates to the guest. | **F20.** Needs a push or messaging channel. | v1 uses polling or SSE. | Guest must open the page. |
 | D29 | tech | Detect and mask person names in free text before LLM calls. | **F22.** Pattern masking cannot spot names reliably. | v1 masks refs, email and phone only. | A surname typed into chat reaches the LLM in v1. Known limit. |
+
+## 2026-10-19 — user stories
+
+| # | Kind | Decision | Why | Alternatives considered | Consequence |
+|---|---|---|---|---|---|
+| D30 | product | Desk hours live in config. Inside them, the human gate times out after 15 minutes. Outside them, the guest sees "Reception opens at 08:00" and the clock starts at opening. | The agent is 24x7, the desk is not. A night timeout flags cases nobody will see. | One timeout always on: night cases go overdue for nothing and the guest has no time to expect. A separate night timeout: nobody acts at night either way. | One more status template. Emergencies are unaffected (D8). Refines D11. |
+| D31 | product | In `ResolveAsHuman`, staff edit only the proposed action: ticket fields, category, urgency. No free text to the guest. | Guest status comes from templates (D25). | Free-text reply: breaks D25 and needs moderation. | Staff who need to talk to the guest phone them. |
+| D32 | product | At most 2 clarifying rounds per task. Then the task is held for a human. | A confused guest must not loop forever. | 1 round: too strict for a vague first message. No limit: a loop with no exit. | The count lives in config. |
+| D33 | product | Staff can restore a parked case of either kind: spam or failed verification. A restore after failed verification sets the scope by hand. | Staff can check a guest by phone. The park must stay recoverable (D13). | Restore spam parks only: a real guest who failed 3 times is stuck. | Scope gains a third source: staff, beside QR and step-up. |
+| D34 | product | No guest cancel in v1. A guest who wants to cancel says so in a message. Staff cancel it. | Keeps the story set small. A cancel is rare. | A cancel button: another story and another state change from an untrusted client. | Cancels go through staff (US13). |
+| D35 | tech | Rate limit 20 messages per 10 minutes, per IP and per cabin token. Values in config. | Gives D18 numbers. A real guest rarely sends more. | 5 per 10 min: blocks a guest in a long exchange. No limit: cost abuse. | Safety messages are exempt (D8). |
+| D36 | product | Refund, compensation, cabin move and safety close-out are always held for a human. Code checks the route, not the LLM. | The brief: no irreversible change without a human when stakes are high. | Let the LLM judge stakes: a prompt is not a guardrail (D24). | The list lives in config. |
+| D37 | product | Ticket states: open, in_progress, done, cancelled. A booking request adds confirmed and declined. | Enough to drive every status template. | More states, such as on_hold: no story needs them. | Real adapters map their states onto these. |
