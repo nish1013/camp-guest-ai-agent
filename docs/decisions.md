@@ -58,3 +58,44 @@
 | D27 | product | Page the duty manager when the human gate times out. | **F9.** Needs a paging integration. | v1 flags overdue in the staff view. | Overnight delays depend on staff checking the view. |
 | D28 | tech | Push updates to the guest. | **F20.** Needs a push or messaging channel. | v1 uses polling or SSE. | Guest must open the page. |
 | D29 | tech | Detect and mask person names in free text before LLM calls. | **F22.** Pattern masking cannot spot names reliably. | v1 masks refs, email and phone only. | A surname typed into chat reaches the LLM in v1. Known limit. |
+
+## 2026-10-19 — user stories
+
+| # | Kind | Decision | Why | Alternatives considered | Consequence |
+|---|---|---|---|---|---|
+| D30 | product | Desk hours live in config. Inside them, the human gate times out after 15 minutes. Outside them, the guest sees "Reception opens at 08:00" and the clock starts at opening. | The agent is 24x7, the desk is not. A night timeout flags cases nobody will see. | One timeout always on: night cases go overdue for nothing and the guest has no time to expect. A separate night timeout: nobody acts at night either way. | One more status template. Emergencies are unaffected (D8). Refines D11. |
+| D31 | product | In `ResolveAsHuman`, staff edit only the proposed action: ticket fields, category, urgency. No free text to the guest. | Guest status comes from templates (D25). | Free-text reply: breaks D25 and needs moderation. | Staff who need to talk to the guest phone them. |
+| D32 | product | At most 2 clarifying rounds per task. Then the task is held for a human. | A confused guest must not loop forever. | 1 round: too strict for a vague first message. No limit: a loop with no exit. | The count lives in config. |
+| D33 | product | Staff can restore a parked case of either kind: spam or failed verification. A restore after failed verification sets the scope by hand. | Staff can check a guest by phone. The park must stay recoverable (D13). | Restore spam parks only: a real guest who failed 3 times is stuck. | Scope gains a third source: staff, beside QR and step-up. |
+| D34 | product | No guest cancel in v1. A guest who wants to cancel says so in a message. Staff cancel it. | Keeps the story set small. A cancel is rare. | A cancel button: another story and another state change from an untrusted client. | Cancels go through staff (US13). |
+| D35 | tech | Rate limit 20 messages per 10 minutes, per IP and per cabin token. Values in config. | Gives D18 numbers. A real guest rarely sends more. | 5 per 10 min: blocks a guest in a long exchange. No limit: cost abuse. | Safety messages are exempt (D8). |
+| D36 | product | Refund, compensation, cabin move and safety close-out are always held for a human. Code checks the route, not the LLM. | The brief: no irreversible change without a human when stakes are high. | Let the LLM judge stakes: a prompt is not a guardrail (D24). | The list lives in config. |
+| D37 | product | Ticket states: open, in_progress, done, cancelled. A booking request adds confirmed and declined. | Enough to drive every status template. | More states, such as on_hold: no story needs them. | Real adapters map their states onto these. |
+
+## 2026-10-19 — invariants
+
+| # | Kind | Decision | Why | Alternatives considered | Consequence |
+|---|---|---|---|---|---|
+| D38 | product | One ticket per job. A report links to an open ticket only when the guest confirms "same problem". The LLM proposes the match. A lock on the cabin row orders the reports in a cabin. Refines D7. | Same cabin and category is not the same job: two heaters in one cabin are two jobs. Only a person can tell. | Link on cabin + category: merges unrelated jobs. Link on cabin + fault type: two heaters still merge. Fault type + item list: every cabin needs an item list, vague reports still mismatch. Always new, staff flag duplicates: duplicates reach staff. | One extra question when an open report may match. The lock is held for the check and insert only, never while the guest answers. Different cabins never wait on each other. |
+| D39 | product | When a message holds 2 or more faults, the guest confirms the split before tickets are created. Urgent and safety faults skip the confirmation. | One job is one ticket. A wrong split sends the wrong staff. | Create at once, guest corrects by reply: wrong tickets reach staff first. Confirm always: delays urgent work. | One extra question for multi-fault messages. Refines D14. |
+| D40 | tech | Ticket status is copied onto the task by the `TicketStatusChanged` handler. The guest page reads the copy. | The ticket system may be external and down. The page polls often (D22). Case close (D20) needs every task's status. | Ask `TicketPort` on every page load: many calls into the camp's system, and the page breaks when it is down. | The copy can lag by seconds. The handler must ignore repeats and out-of-order events. |
+
+## 2026-10-19 — domain model
+
+| # | Kind | Decision | Why | Alternatives considered | Consequence |
+|---|---|---|---|---|---|
+| D41 | tech | Intake asks Stay for step-up and staff restore. When Stay is down, the guest sees "We cannot check bookings right now. Please call reception on ..." and the attempt does not count towards the 3. | Step-up needs current booking data. It is rare, so asking is cheap. | Copy all bookings into Intake: a second copy of PII, and a sync to keep it current. | Step-up depends on Stay's uptime. QR guests are not affected. |
+| D42 | tech | Intake asks Guide for answers. Emergency guidance and the reception number are copied at start-up. When Guide is down, a question gets "I can't check the guide right now", plus the copied reception number. | An emergency reply must never depend on another system (D8). | Ask for everything: an emergency fails with the guide. Copy the whole guide: a sync for no gain. | A guide change to the emergency section needs a restart to take effect. |
+| D43 | tech | Intake asks Ticketing to create a ticket. When Ticketing is down, bounded retries, then the task is held for a human, "With reception". | Creating a ticket is a command. It cannot be copied. | Queue tickets locally and replay: a second ticket store to keep consistent. | Ticket creation depends on Ticketing's uptime. Same path as D16. |
+| D44 | tech | One graph step commits one aggregate. US4 saves the report in one step and the task's ticket in the next. | One aggregate per transaction. The checkpointer resumes from the last committed step (D5). | Save the report and the task together: two aggregates in one transaction, one lock waits on another. | A crash between the steps resumes at step 2. The report's unique `(case_id, step_id)` stops a second insert. |
+| D45 | tech | I12 uses an in-process handler on an outbox. The handler ignores a version at or below the stored one. No inbox. No broker. | One service, one database. A version makes repeats and out-of-order events harmless. | Broker: an extra service for one event. Inbox table: duplicates the version check and needs a cleanup cron. | Real ticket adapters must send a version or an updated-at that increases. |
+| D46 | tech | I2 uses a run lease on the case row, claimed by a conditional update and expiring after a set time. Messages are saved without the lease. | A database lock held during an LLM call blocks for seconds. A message must never wait on a run (D6). | Row lock for the whole run: long locks, a blocked message intake. | A crashed run frees the case when its lease expires. Lease length in config. |
+
+## 2026-10-19 — plan
+
+| # | Kind | Decision | Why | Alternatives considered | Consequence |
+|---|---|---|---|---|---|
+| D47 | tech | Server-rendered UI: FastAPI + Jinja + HTMX. Status by SSE. | One deployable and no Node build keep "clone, compose, one key". Plain HTML works on a phone. | React SPA: a second build and a JSON API for one small UI. | UI interactions are limited to what HTMX does well. Enough for forms and a live status line. |
+| D48 | tech | `LlmPort` uses Pydantic AI with the OpenAI provider. The model name comes from `.env`. | Output is parsed into Pydantic models, which D15 needs. The provider is config, not code. | Raw OpenAI SDK: hand-written parsing. LangChain chat models: a second abstraction beside LangGraph. | One `OPENAI_API_KEY` runs the demo. |
+| D49 | tech | Evals run only by hand, `make evals`. Not in CI. | Evals cost tokens and depend on the model. CI stays free and deterministic. | Evals in CI with a secret key: cost on every push and flaky runs. | Run evals before merging a change to a prompt or the graph. |
+| D50 | tech | Postgres 16. | I4 needs a transaction lock on the cabin id. LangGraph has a Postgres checkpointer. | SQLite: no advisory lock, weak concurrent writes. | Compose runs a Postgres service. Integration tests use testcontainers. |
