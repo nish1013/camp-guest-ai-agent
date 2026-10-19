@@ -21,12 +21,14 @@ flowchart LR
     GuidePort
     StayContextPort
     TicketPort
+    NotificationPort
     LlmPort
   end
   subgraph Demo["Demo adapters (Compose)"]
     GuideMd["camp-guide.md"]
     SeedStays["seed stays"]
     DemoTickets["demo_tickets table"]
+    StatusLog["log line per status change"]
     OpenAI["OpenAI via Pydantic AI"]
   end
   Guest --> Service
@@ -36,6 +38,7 @@ flowchart LR
   Graph --> GuidePort --> GuideMd
   Graph --> StayContextPort --> SeedStays
   Graph --> TicketPort --> DemoTickets
+  Graph --> NotificationPort --> StatusLog
   Graph --> LlmPort --> OpenAI
   Service --> DB[("Postgres")]
 ```
@@ -165,4 +168,6 @@ flowchart LR
   Prompt -- new --> Picks --> New["new case, pick saved<br/>hint for classify (D51)"]
   Page["case page"] -- "SSE, poll case state" --> Render["fixed templates (D25)<br/>desk hours (D30)"]
   Render -- "status lines, forms:<br/>sent when changed" --> Page
+  Commit["graph step, staff write,<br/>ticket status"] --> Render
+  Render -- "status lines hash moved" --> Notify["NotificationPort<br/>(after commit)"]
 ```

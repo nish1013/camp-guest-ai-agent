@@ -138,12 +138,12 @@ Built:    a status pass lists the tasks holding a ticket ref under `pg_advisory_
 Why:      a link reads the earlier task's status before it commits. A pass that applied a newer status and deleted the event in between left the linked task behind for good, and a case that never sees "done" never closes (I11, I12). The version check cannot catch a task the pass never saw.
 Undo:     drop `lock_ticket` from `write_step` and the pass, and delete an event that matched no task.
 
-## D20. The case page derives status on read; no `NotificationPort` (PR 9, 2026-10-19)
+## D20. The page derives status on read; `NotificationPort` is told of a change (PR 9, 2026-10-19)
 
-Plan:     decisions.md D22: "`NotificationPort` demo adapter writes case status." architecture.md: "Graph --> NotificationPort --> case status".
-Built:    no `NotificationPort`. `GET /c/{case_token}/events` reads the case and its tasks every `STATUS_POLL_S` and renders the fixed templates (D25). The status lines and the guest's forms are two events, each sent only when its HTML changes. The event id names both; a reconnect sends it back as `Last-Event-ID`, and the page link carries the id of its first render, so nothing unchanged is sent again. A stream ends after `STATUS_STREAM_S` and the browser reconnects.
-Why:      domain.md lists guest status text as derived from case state, with nothing stored. A port that writes status would keep a second copy that can disagree with the case. Sending the forms apart from the status lines keeps a half-typed step-up form on screen while a ticket line changes.
-Undo:     add a `NotificationPort` that the graph calls after each step, and stream what it writes.
+Plan:     decisions.md D22: "`NotificationPort` demo adapter writes case status." domain.md: guest status text is derived from case state, nothing stored.
+Built:    the case page and `GET /c/{case_token}/events` render the fixed templates (D25) from case state on every read. After a graph step, a staff write or an applied ticket status commits, the same template code renders the status lines; when their hash differs from the one in `status_notices`, `NotificationPort.notify` is called. The demo adapter writes one JSON line to the log. The port stores nothing the page reads. It runs after the commit, and an error is logged and leaves the case unchanged.
+Why:      a stored status would be a second copy that can disagree with the case. The hash, claimed with a conditional upsert, keeps a repeated event or a retried step from notifying twice.
+Undo:     have the demo adapter write status to a table and make the page read it.
 
 ## D21. Add posts the offered case; a case closed since follows D20 (PR 9, 2026-10-19)
 
