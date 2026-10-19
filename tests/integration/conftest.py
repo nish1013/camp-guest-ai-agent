@@ -3,9 +3,15 @@ from collections.abc import AsyncIterator, Iterator
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from testcontainers.community.postgres import PostgresContainer
+
+from camp_agent.app import create_app
+from camp_agent.config import Settings
+from tests.fakes import FakeClock, oct_19
+from tests.integration.intake_support import SECRET, RecordingGraph
 
 
 @pytest.fixture(scope="session")
@@ -36,3 +42,22 @@ async def async_db(db: Engine, migrated_url: str) -> AsyncIterator[AsyncEngine]:
     engine = create_async_engine(migrated_url)
     yield engine
     await engine.dispose()
+
+
+@pytest.fixture
+def graph() -> RecordingGraph:
+    return RecordingGraph()
+
+
+@pytest.fixture
+def clock() -> FakeClock:
+    return oct_19()
+
+
+@pytest.fixture
+def client(
+    db: Engine, migrated_url: str, graph: RecordingGraph, clock: FakeClock
+) -> Iterator[TestClient]:
+    settings = Settings(database_url=migrated_url, secret_key=SECRET)
+    with TestClient(create_app(settings, clock=clock, graph=graph)) as test_client:
+        yield test_client

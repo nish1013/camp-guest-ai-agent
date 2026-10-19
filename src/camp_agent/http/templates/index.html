@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"429","swap":true,"error":false},{"code":"...","swap":false,"error":true}]}'>
+  <title>Camp Guest Assistant</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 40rem; padding: 1rem; }
+    textarea, button { width: 100%; box-sizing: border-box; font-size: 1rem; }
+    textarea { min-height: 6rem; }
+    button { margin-top: 0.5rem; padding: 0.75rem; }
+  </style>
+</head>
+<body>
+  <h1>Camp Guest Assistant</h1>
+  {% if scope %}
+  <p id="scope">Cabin {{ scope.cabin }}, stay {{ scope.stay_from.strftime("%d %b") }} to {{ scope.stay_to.strftime("%d %b") }}</p>
+  {% endif %}
+  <section id="case" aria-live="polite">
+    {% if case %}{% include "_case_status.html" %}{% endif %}
+  </section>
+  {% include "_form.html" %}
+</body>
+</html>
