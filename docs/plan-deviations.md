@@ -94,3 +94,10 @@ Plan:     domain.md, I8: "case root; version number on the case". The hard part 
 Built:    after the args pass validation, the ticket step locks the case row (`FOR NO KEY UPDATE`), checks the case is not parked, calls `TicketPort.create`, and saves the ticket in that transaction. The LLM draft runs before the lock.
 Why:      the version check alone rejects the ticket row on a parked case, but `create` has already sent the ticket. Every park is an `UPDATE` of the case row, so it now waits for the commit and then loses the version check. A park that commits first is seen before `create`. The lock covers one aggregate and no LLM call, so D44 and D46 hold. The create stays keyed by case and step (I3).
 Undo:     drop `lock_case` and save the ticket with the version check alone; a park between `create` and the commit then leaves a ticket sent for a parked case.
+
+## D14. A follow-up on a case in action runs only the safety rule (PR 6, 2026-10-19)
+
+Plan:     US2: "cookie holds open case K1 | 'also the heater is off' | the message joins K1." Request and graph flow: every message goes through verify, split, classify and the route guard.
+Built:    a case is in action once one of its tasks has a ticket or a booking request. A new message on such a case runs only the D8 safety rule. It joins the case for staff to read, with a `safety: joined` audit entry: no LLM call, no park, no new task. A case with an open question to the guest (clarify, step-up, split or same-problem) is still triaged, as before. The park step refuses a case in action. The rule is `domain/case_activity.py`, used at the graph entry and in the park step.
+Why:      a spam verdict on a follow-up parked a case with an open ticket, against I8; decisions.md D13 parks spam. A safety hit still marks the case urgent and shows the guidance (I9). Chosen on 2026-10-19 in review.
+Undo:     drop the entry check in the safety step and the park check; every follow-up is then triaged and a spam verdict can park a case in action.
