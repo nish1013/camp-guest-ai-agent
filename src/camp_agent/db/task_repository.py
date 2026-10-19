@@ -6,11 +6,13 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from camp_agent.db.answered_question import AnsweredQuestion
+from camp_agent.db.staff_rows import StaffTask
 from camp_agent.db.tables import tasks
 from camp_agent.domain.fault_flow import ACTIONABLE, FaultTask
 from camp_agent.domain.fault_type import FaultType
 from camp_agent.domain.route_guard import Category, TaskKind, TaskState
 from camp_agent.domain.table_flow import TO_BOOK, TableBooking, TableTask
+from camp_agent.domain.ticket_status import TicketStatus
 from camp_agent.domain.urgency import Urgency
 from camp_agent.graph.triage_types import TaskAnswer, TaskDraft, TaskTransition, WaitingTask
 
@@ -114,6 +116,26 @@ class TaskRepository:
         return [
             TableBooking(row.cabin, row.booking_party, row.booking_date, row.booking_time)
             for row in rows
+        ]
+
+    async def for_staff(self, case_id: int) -> list[StaffTask]:
+        query = select(tasks).where(tasks.c.case_id == case_id).order_by(tasks.c.id)
+        return [
+            StaffTask(
+                row.id,
+                row.step_id,
+                TaskKind(row.kind),
+                None if row.category is None else Category(row.category),
+                Urgency(row.urgency),
+                TaskState(row.state),
+                row.summary,
+                row.ticket_ref,
+                None if row.ticket_status is None else TicketStatus(row.ticket_status),
+                row.booking_party,
+                row.booking_date,
+                row.booking_time,
+            )
+            for row in (await self._conn.execute(query)).all()
         ]
 
     async def states(self, case_id: int) -> list[TaskState]:

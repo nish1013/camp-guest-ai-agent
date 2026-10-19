@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Form, Request, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -15,6 +15,7 @@ from camp_agent.http.staff_auth import (
     require_staff,
 )
 from camp_agent.staff.list_queue import ListQueue
+from camp_agent.staff.show_case import ShowCase
 
 QUEUE_PATH = "/staff/cases"
 LOGIN_REFUSED = "Wrong user name or password."
@@ -25,6 +26,7 @@ class StaffServices:
     settings: Settings
     camp_timezone: ZoneInfo
     queue: ListQueue
+    show_case: ShowCase
 
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
@@ -79,6 +81,25 @@ async def queue(request: Request, services: Services) -> HTMLResponse:
 async def parked(request: Request, services: Services) -> HTMLResponse:
     context = {"cases": await services.queue.parked(), "tz": services.camp_timezone}
     return templates.TemplateResponse(request, "staff_parked.html", context)
+
+
+@guarded.get("/cases/{case_id}", response_class=HTMLResponse)
+async def case_page(request: Request, services: Services, case_id: int) -> HTMLResponse:
+    return await _case_page(request, services, case_id)
+
+
+async def _case_page(
+    request: Request,
+    services: StaffServices,
+    case_id: int,
+    notice: str | None = None,
+    status_code: int = status.HTTP_200_OK,
+) -> HTMLResponse:
+    detail = await services.show_case(case_id)
+    if detail is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    context = {"detail": detail, "notice": notice, "tz": services.camp_timezone}
+    return templates.TemplateResponse(request, "staff_case.html", context, status_code=status_code)
 
 
 router.include_router(guarded)

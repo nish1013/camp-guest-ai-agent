@@ -1,0 +1,47 @@
+{% extends "staff_base.html" %}
+{% block content %}
+{% set case = detail.case %}
+<h1>Case K{{ case.id }}</h1>
+{% if notice %}<p class="notice" data-notice>{{ notice }}</p>{% endif %}
+<p>
+  State: <strong data-state>{{ case.status.state }}{% if case.status.reason %}: {{ case.status.reason }}{% endif %}</strong>
+  {% if detail.overdue %}<span class="overdue" data-overdue>Overdue</span>{% endif %}<br>
+  Urgency: {{ case.status.urgency }}{% if case.status.safety %} (safety){% endif %}<br>
+  Scope: {% if case.scope %}{{ case.scope.cabin }}, {{ case.scope.stay_from }} to {{ case.scope.stay_to }} ({{ case.scope.source }}){% else %}none{% endif %}
+</p>
+
+<h2>Tasks</h2>
+<table>
+  <tr><th>Task</th><th>Kind</th><th>Urgency</th><th>State</th><th>Detail</th></tr>
+  {% for task in detail.tasks %}
+  <tr data-task="{{ task.step_id }}">
+    <td>{{ task.summary }}</td>
+    <td>{{ task.kind }}{% if task.category %} / {{ task.category }}{% endif %}</td>
+    <td>{{ task.urgency }}</td>
+    <td data-task-state>{{ task.state }}</td>
+    <td>
+      {% if task.ticket_ref %}{{ task.ticket_ref }}: {{ task.ticket_status }}{% endif %}
+      {% if task.booking_party %}{{ task.booking_party }} at {{ task.booking_time.strftime("%H:%M") }} on {{ task.booking_date }}{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h2>Messages</h2>
+{% for message in detail.messages %}
+<p data-message><small>{{ message.created_at.astimezone(tz).strftime("%d %b %H:%M") }}</small> {{ message.text }}</p>
+{% endfor %}
+
+<h2>Audit</h2>
+<table>
+  <tr><th>Time</th><th>Step</th><th>Decision</th><th>Detail</th></tr>
+  {% for line in detail.audit %}
+  <tr data-audit>
+    <td>{{ line.created_at.astimezone(tz).strftime("%H:%M:%S") }}</td>
+    <td>{{ line.step }}</td>
+    <td>{{ line.decision }}</td>
+    <td>{% for key, value in line.detail.items() %}{{ key }}={{ value }} {% endfor %}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

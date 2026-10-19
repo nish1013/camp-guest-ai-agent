@@ -5,6 +5,7 @@ from sqlalchemy import exists, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from camp_agent.db.staff_rows import StaffMessage
 from camp_agent.db.tables import messages
 from camp_agent.graph.triage_graph import PendingMessage
 
@@ -35,6 +36,15 @@ class MessageRepository:
         )
         rows = (await self._conn.execute(query)).all()
         return [PendingMessage(row.id, row.text) for row in rows]
+
+    async def for_staff(self, case_id: int) -> list[StaffMessage]:
+        query = (
+            select(messages.c.id, messages.c.text, messages.c.created_at)
+            .where(messages.c.case_id == case_id)
+            .order_by(messages.c.id)
+        )
+        rows = (await self._conn.execute(query)).all()
+        return [StaffMessage(row.id, row.text, row.created_at) for row in rows]
 
     async def has_pending(self, case_id: int) -> bool:
         query = select(

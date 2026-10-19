@@ -42,6 +42,7 @@ from camp_agent.llm.pydantic_ai_llm import PydanticAiLlm
 from camp_agent.llm.retrying_llm import RetryingLlm
 from camp_agent.qr.qr_token import QrTokens
 from camp_agent.staff.list_queue import ListQueue
+from camp_agent.staff.show_case import ShowCase
 from camp_agent.stay.seed_stays import SeedStays
 from camp_agent.stay.stay_port import StayContextPort
 from camp_agent.ticket.demo_tickets import DemoTickets
@@ -116,12 +117,12 @@ def create_app(
             step_up_form=StepUpForm(engine, resolved.step_up_case_failures),
             answer=SubmitAnswer(engine, resolved_clock),
         )
+        gate = timedelta(seconds=resolved.gate_timeout_s)
         app.state.staff_services = StaffServices(
             settings=resolved,
             camp_timezone=camp_tz,
-            queue=ListQueue(
-                engine, resolved_clock, desk, timedelta(seconds=resolved.gate_timeout_s)
-            ),
+            queue=ListQueue(engine, resolved_clock, desk, gate),
+            show_case=ShowCase(engine, resolved_clock, desk, gate),
         )
         yield
         await engine.dispose()
