@@ -1,4 +1,5 @@
 from sqlalchemy import (
+    ARRAY,
     BigInteger,
     Boolean,
     Column,
@@ -60,6 +61,52 @@ tasks = Table(
     Column("summary", Text, nullable=False),
     Column("answer", Text),
     Column("answer_section", Text),
+    Column("fault_type", Text),
+    Column("cabin", Text),
+    Column("ticket_ref", Text),
+    Column("ticket_status", Text),
+    Column("ticket_version", Integer),
+    Column("same_report_id", BigInteger),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
+
+reports = Table(
+    "reports",
+    metadata,
+    Column("id", BigInteger, primary_key=True),
+    Column("cabin", Text, nullable=False),
+    Column("fault_type", Text, nullable=False),
+    Column("case_id", BigInteger, nullable=False),
+    Column("step_id", Text, nullable=False),
+    Column("summary", Text, nullable=False),
+    Column("checked_against", ARRAY(BigInteger), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
+
+validation_records = Table(
+    "validation_records",
+    metadata,
+    Column("id", BigInteger, primary_key=True),
+    Column("case_id", BigInteger, nullable=False),
+    Column("step_id", Text, nullable=False),
+    Column("outcome", Text, nullable=False),
+    Column("args", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
+
+demo_tickets = Table(
+    "demo_tickets",
+    metadata,
+    Column("id", BigInteger, primary_key=True),
+    Column("case_id", BigInteger, nullable=False),
+    Column("step_id", Text, nullable=False),
+    Column("cabin", Text, nullable=False),
+    Column("team", Text, nullable=False),
+    Column("fault_type", Text, nullable=False),
+    Column("urgency", Text, nullable=False),
+    Column("summary", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    Column("version", Integer, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
 
@@ -89,20 +136,4 @@ ip_verification_failures = Table(
     Column("id", BigInteger, primary_key=True),
     Column("ip", Text, nullable=False),
     Column("failed_at", DateTime(timezone=True), nullable=False),
-)
-
-demo_tickets = Table(
-    "demo_tickets",
-    metadata,
-    Column("id", BigInteger, primary_key=True),
-    Column("case_id", BigInteger, nullable=False),
-    Column("step_id", Text, nullable=False),
-    Column("cabin", Text, nullable=False),
-    Column("team", Text, nullable=False),
-    Column("fault_type", Text, nullable=False),
-    Column("urgency", Text, nullable=False),
-    Column("summary", Text, nullable=False),
-    Column("status", Text, nullable=False),
-    Column("version", Integer, nullable=False),
-    Column("created_at", DateTime(timezone=True), nullable=False),
 )

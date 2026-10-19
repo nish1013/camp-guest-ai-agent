@@ -7,6 +7,7 @@ from camp_agent.clock import Clock
 from camp_agent.db.case_repository import CaseRepository
 from camp_agent.db.message_repository import MessageRepository
 from camp_agent.db.task_repository import TaskRepository
+from camp_agent.domain.case_state import CaseState
 from camp_agent.domain.step_up import resumes_waiting
 from camp_agent.graph.triage_graph import TriageGraph
 
@@ -59,6 +60,9 @@ class RunCoordinator:
             if await MessageRepository(conn).has_pending(case_id):
                 return True
             case = await CaseRepository(conn).get(case_id)
-            if not resumes_waiting(case.status, case.scope):
+            tasks = TaskRepository(conn)
+            if resumes_waiting(case.status, case.scope) and await tasks.has_awaiting_scope(case_id):
+                return True
+            if case.status.state is CaseState.PARKED:
                 return False
-            return await TaskRepository(conn).has_awaiting_scope(case_id)
+            return await tasks.has_actionable_faults(case_id)

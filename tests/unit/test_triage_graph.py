@@ -175,7 +175,7 @@ async def test_us2_two_intents_two_tasks() -> None:
     store = await triage(llm, text)
 
     assert [(t.step_id, t.kind, t.state) for t in store.tasks] == [
-        ("m1/t0", TaskKind.FAULT, TaskState.QUEUED),
+        ("m1/t0", TaskKind.FAULT, TaskState.TICKETED),
         ("m1/t1", TaskKind.TABLE, TaskState.QUEUED),
     ]
     assert store.status(CASE).urgency is Urgency.URGENT
@@ -187,6 +187,8 @@ async def test_us2_two_intents_two_tasks() -> None:
         "route_guard:fault",
         "classify:table",
         "route_guard:table",
+        "same:none",
+        "ticket:created",
     ]
 
 
@@ -300,10 +302,10 @@ async def test_us7_resume_queues_waiting_fault() -> None:
 
     await graph_for(llm, store).resume(CASE)
 
-    assert [(t.kind, t.state) for t in store.tasks] == [(TaskKind.FAULT, TaskState.QUEUED)]
-    assert store.audit[-1].step == "route_guard"
-    assert store.audit[-1].detail == {"step_id": "m1/t0", "state": "queued", "scope": "step_up"}
-    assert llm.calls == ["verify", "split", "classify"]
+    assert [(t.kind, t.state) for t in store.tasks] == [(TaskKind.FAULT, TaskState.TICKETED)]
+    assert steps(store)[-3:] == ["route_guard:fault", "same:none", "ticket:created"]
+    assert store.audit[-3].detail == {"step_id": "m1/t0", "state": "queued", "scope": "step_up"}
+    assert llm.calls == ["verify", "split", "classify", "draft_ticket"]
 
 
 @pytest.mark.parametrize("scope", [None, C12], ids=["no-scope", "parked"])

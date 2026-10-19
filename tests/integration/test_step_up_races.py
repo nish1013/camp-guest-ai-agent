@@ -12,6 +12,7 @@ from camp_agent.db.pg_triage_store import PgTriageStore
 from camp_agent.db.task_repository import TaskRepository
 from camp_agent.db.verification_repository import VerificationRepository
 from camp_agent.domain.case_state import CaseState, StateReason
+from camp_agent.domain.fault_type import FaultType
 from camp_agent.domain.route_guard import Category, TaskKind, TaskState
 from camp_agent.domain.scope import Scope, ScopeSource
 from camp_agent.domain.urgency import Urgency
@@ -22,6 +23,7 @@ from camp_agent.graph.triage_types import TaskDraft
 from camp_agent.intake.run_coordinator import RunCoordinator
 from camp_agent.intake.step_up_types import StepUpCommand, StepUpLimits, StepUpResult
 from camp_agent.intake.submit_step_up import SubmitStepUp
+from camp_agent.ticket.demo_tickets import DemoTickets
 from tests.fakes import FakeLlm, demo_guide, demo_stays, oct_19
 from tests.unit.triage_support import C12, POLICY, RECEPTION
 
@@ -40,6 +42,7 @@ FAULT = TaskDraft(
     Urgency.URGENT,
     TaskState.AWAITING_SCOPE,
     "no hot water",
+    FaultType.HOT_WATER,
 )
 
 
@@ -113,7 +116,12 @@ async def test_us7_step_up_during_run_resumed(async_db: AsyncEngine) -> None:
     store = PgTriageStore(async_db)
     llm = FakeLlm()
     triage = LangGraphTriage(
-        llm, store, oct_19(), POLICY, GuideAnswerer(llm, demo_guide(), RECEPTION)
+        llm,
+        store,
+        oct_19(),
+        POLICY,
+        GuideAnswerer(llm, demo_guide(), RECEPTION),
+        DemoTickets(async_db),
     )
     graph = GatedTriage(triage)
     coordinator = RunCoordinator(async_db, graph, oct_19(), LEASE)

@@ -99,4 +99,6 @@ async def test_us2_question_then_fault() -> None:
         "answer:no_section",
         "classify:fault",
         "route_guard:fault",
+        "same:none",
+        "ticket:created",
     ]
