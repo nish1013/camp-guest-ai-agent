@@ -4,15 +4,26 @@ from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Form,
+    Header,
+    HTTPException,
+    Request,
+    status,
+)
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup
 from pydantic import StringConstraints
 
 from camp_agent.clock import Clock
 from camp_agent.config import Settings
 from camp_agent.db.answered_question import AnsweredQuestion
 from camp_agent.db.case_record import CaseRecord
+from camp_agent.domain.desk_hours import DeskHours
 from camp_agent.domain.fault_flow import Confirmation
 from camp_agent.domain.guest_status import (
     BOOKING_FOUND,
@@ -23,6 +34,7 @@ from camp_agent.domain.guest_status import (
 from camp_agent.domain.quick_pick import QuickPick
 from camp_agent.domain.scope import Scope
 from camp_agent.guide.guide_types import GuideCopy
+from camp_agent.http.status_events import StatusEvents, event_id
 from camp_agent.intake.answer_types import AnswerCommand, BookingLine, CaseFaults
 from camp_agent.intake.find_case import FindCase
 from camp_agent.intake.intake_types import Accepted, SubmitMessageCommand
@@ -67,6 +79,14 @@ class CaseView:
 
 
 @dataclass(frozen=True)
+class CasePanel:
+    link: str
+    lines: Markup
+    actions: Markup
+    seen: str
+
+
+@dataclass(frozen=True)
 class CaseOffer:
     token: str
     label: str
@@ -76,6 +96,7 @@ class CaseOffer:
 class GuestServices:
     settings: Settings
     clock: Clock
+    desk: DeskHours
     guide_copy: GuideCopy
     qr_tokens: QrTokens
     submit: SubmitMessage
@@ -125,6 +146,41 @@ async def open_from_qr(request: Request, qr_token: str, services: Services) -> H
     return await _page(request, services)
 
 
+@router.get("/c/{case_token}", response_class=HTMLResponse)
+async def case_page(request: Request, case_token: str, services: Services) -> HTMLResponse:
+    case = await services.find_case(case_token)
+    if case is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    response = await _page(request, services, case_token)
+    _keep_case(response, case_token, services)
+    return response
+
+
+@router.get("/c/{case_token}/events")
+async def case_events(
+    case_token: str,
+    services: Services,
+    seen: str | None = None,
+    last_event_id: Annotated[str | None, Header()] = None,
+) -> StreamingResponse:
+    if await services.find_case(case_token) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+
+    async def render() -> dict[str, str] | None:
+        case = await services.find_case(case_token)
+        return None if case is None else _parts(await _view(case, services))
+
+    events = StatusEvents(
+        render, services.settings.status_poll_s, services.settings.status_stream_s
+    )
+    # A reconnect sends the id of the last event it got; the page link names its first render.
+    return StreamingResponse(
+        events.stream(last_event_id or seen),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @router.post("/messages", response_class=HTMLResponse)
 async def submit_message(
     request: Request,
@@ -166,20 +222,13 @@ async def submit_message(
         request,
         "_case.html",
         {
-            "case": await _view(result.case, services),
+            "case": await _panel(result.case, services),
             "scope": _scope(request, services),
             "offer": await _offer(result.case.case_token, services),
             "next_key": uuid4(),
         },
     )
-    response.set_cookie(
-        CASE_COOKIE,
-        result.case.case_token,
-        max_age=services.settings.case_cookie_max_age_s,
-        httponly=True,
-        samesite="lax",
-        secure=services.settings.cookie_secure,
-    )
+    _keep_case(response, result.case.case_token, services)
     return response
 
 
@@ -210,7 +259,7 @@ async def step_up(
         request,
         "_case_status.html",
         {
-            "case": await _view(reply.case, services),
+            "case": await _panel(reply.case, services),
             "reply": _step_up_reply(reply.result, services),
         },
     )
@@ -234,14 +283,16 @@ async def answer(
     if reply.moved:
         background.add_task(services.coordinator.drive, reply.case.id)
     return templates.TemplateResponse(
-        request, "_case_status.html", {"case": await _view(reply.case, services)}
+        request, "_case_status.html", {"case": await _panel(reply.case, services)}
     )
 
 
-async def _page(request: Request, services: GuestServices) -> HTMLResponse:
+async def _page(
+    request: Request, services: GuestServices, case_token: str | None = None
+) -> HTMLResponse:
     case = None
     offer = None
-    token = request.cookies.get(CASE_COOKIE)
+    token = case_token or request.cookies.get(CASE_COOKIE)
     if token is not None:
         case = await services.find_case(token)
         offer = await _offer(token, services)
@@ -250,7 +301,7 @@ async def _page(request: Request, services: GuestServices) -> HTMLResponse:
         "index.html",
         {
             "scope": _scope(request, services),
-            "case": None if case is None else await _view(case, services),
+            "case": None if case is None else await _panel(case, services),
             "offer": offer,
             "next_key": uuid4(),
         },
@@ -282,11 +333,39 @@ def _scope(request: Request, services: GuestServices) -> Scope | None:
     return services.qr_tokens.read(token, services.clock.today()).scope
 
 
+def _keep_case(response: HTMLResponse, case_token: str, services: GuestServices) -> None:
+    response.set_cookie(
+        CASE_COOKIE,
+        case_token,
+        max_age=services.settings.case_cookie_max_age_s,
+        httponly=True,
+        samesite="lax",
+        secure=services.settings.cookie_secure,
+    )
+
+
+async def _panel(case: CaseRecord, services: GuestServices) -> CasePanel:
+    view = await _view(case, services)
+    parts = _parts(view)
+    return CasePanel(view.link, Markup(parts["status"]), Markup(parts["actions"]), event_id(parts))
+
+
+def _parts(view: CaseView) -> dict[str, str]:
+    return {
+        "status": templates.get_template("_case_lines.html").render(case=view),
+        "actions": templates.get_template("_case_actions.html").render(case=view),
+    }
+
+
 async def _view(case: CaseRecord, services: GuestServices) -> CaseView:
+    now = services.clock.now()
     return CaseView(
         link=f"/c/{case.case_token}",
         status=guest_status(
-            case.status, services.guide_copy.emergency, services.guide_copy.reception
+            case.status,
+            services.guide_copy.emergency,
+            services.guide_copy.reception,
+            None if services.desk.is_open(now) else services.desk.opens,
         ),
         answers=await services.list_answers(case.id),
         faults=await services.list_faults(case.id),

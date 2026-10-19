@@ -6,8 +6,9 @@
   <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"429","swap":true,"error":false},{"code":"...","swap":false,"error":true}]}'>
   <title>Camp Guest Assistant</title>
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+  <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 40rem; padding: 1rem; }
+    body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 40rem; padding: 1rem; overflow-wrap: anywhere; }
     label { display: block; margin-top: 0.5rem; }
     textarea, input, button { width: 100%; box-sizing: border-box; font-size: 1rem; }
     textarea { min-height: 6rem; }

@@ -114,6 +114,7 @@ def create_app(
         app.state.guest_services = GuestServices(
             settings=resolved,
             clock=resolved_clock,
+            desk=desk,
             guide_copy=guide_copy,
             qr_tokens=QrTokens(resolved.secret_key),
             submit=SubmitMessage(
