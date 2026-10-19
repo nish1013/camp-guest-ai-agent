@@ -94,7 +94,11 @@ class LangGraphTriage:
             return
         for task in await self._store.awaiting_scope(case_id):
             decision = guard_route(
-                task.category, Route(task.kind.value), True, self._policy.held_categories
+                task.category,
+                Route(task.kind.value),
+                case.scope,
+                self._clock.today(),
+                self._policy.held_categories,
             )
             detail: dict[str, AuditValue] = {
                 "step_id": task.step_id,
@@ -203,7 +207,8 @@ class LangGraphTriage:
         decision = guard_route(
             proposal.category,
             proposal.route,
-            case.scope is not None,
+            case.scope,
+            self._clock.today(),
             self._policy.held_categories,
         )
         step_id = _step_id(state)
