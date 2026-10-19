@@ -3,7 +3,7 @@
 One Python app: FastAPI serves a phone-first web UI and runs a LangGraph triage graph over ports.
 Docker Compose runs it with Postgres and demo adapters. One OpenAI API key is the only secret.
 
-Status: draft, 2026-10-19
+Status: locked, 2026-10-19
 
 ## Context
 
@@ -176,3 +176,7 @@ make test-int       Postgres via testcontainers, demo adapters
 make evals          by hand, needs OPENAI_API_KEY
 docker compose up   then the README walk-through
 ```
+
+## Deviations
+
+None yet.
