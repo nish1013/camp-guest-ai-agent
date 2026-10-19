@@ -90,3 +90,19 @@ ip_verification_failures = Table(
     Column("ip", Text, nullable=False),
     Column("failed_at", DateTime(timezone=True), nullable=False),
 )
+
+demo_tickets = Table(
+    "demo_tickets",
+    metadata,
+    Column("id", BigInteger, primary_key=True),
+    Column("case_id", BigInteger, nullable=False),
+    Column("step_id", Text, nullable=False),
+    Column("cabin", Text, nullable=False),
+    Column("team", Text, nullable=False),
+    Column("fault_type", Text, nullable=False),
+    Column("urgency", Text, nullable=False),
+    Column("summary", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
