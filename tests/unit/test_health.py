@@ -1,6 +1,9 @@
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 
 from camp_agent.app import create_app
+from camp_agent.config import Settings
 from camp_agent.http.health import HealthProbe, get_probe
 
 
@@ -32,3 +35,12 @@ def test_health_503_when_db_down() -> None:
 
     assert response.status_code == 503
     assert response.json() == {"status": "unavailable", "database": "unavailable"}
+
+
+def test_d16_starts_with_the_empty_key_of_env_example(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    app = create_app(Settings(_env_file=None, openai_api_key=SecretStr("")))
+    app.dependency_overrides[get_probe] = lambda: FakeProbe(up=True)
+
+    with TestClient(app) as client:
+        assert client.get("/health").status_code == 200

@@ -183,9 +183,11 @@ def create_app(
 
 
 def _openai_llm(settings: Settings) -> PydanticAiLlm:
-    # With no key the app still starts; every LLM call fails and the case is held (D16).
+    # With no key, or the empty one .env.example holds, the app still starts; every LLM call
+    # fails and the case is held (D16).
     model: Model | str = f"openai:{settings.llm_model}"
-    if settings.openai_api_key is not None:
-        provider = OpenAIProvider(api_key=settings.openai_api_key.get_secret_value())
+    key = settings.openai_api_key.get_secret_value() if settings.openai_api_key else ""
+    if key:
+        provider = OpenAIProvider(api_key=key)
         model = OpenAIChatModel(settings.llm_model, provider=provider)
     return PydanticAiLlm(model, settings.llm_timeout_s)
