@@ -25,7 +25,8 @@ class CaseStatus:
         )
 
     def hold(self, reason: StateReason, now: datetime) -> "CaseStatus":
-        if self.state is CaseState.HELD:
+        # A parked case leaves parking only by a safety hit or a staff restore (I10).
+        if self.state is not CaseState.OPEN:
             return self
         return replace(self, state=CaseState.HELD, reason=reason, held_at=now)
 

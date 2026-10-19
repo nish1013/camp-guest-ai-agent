@@ -10,8 +10,9 @@ from camp_agent.domain.guest_status import (
 )
 from camp_agent.domain.route_guard import Category, Route, TaskKind, TaskState
 from camp_agent.domain.urgency import Urgency
+from camp_agent.graph.triage_types import StepRecord
 from camp_agent.llm.llm_types import Verdict
-from tests.fakes import FakeLlm
+from tests.fakes import FakeLlm, InMemoryTriageStore
 from tests.unit.triage_support import CASE, new_store, proposal, steps, triage
 
 pytestmark = pytest.mark.anyio
@@ -248,3 +249,29 @@ async def test_i13_llm_failure_audited() -> None:
     store = await triage(FakeLlm(down=True), "hello")
 
     assert steps(store) == ["safety:clear", "llm_failed:held"]
+
+
+class ParkedMidStep(InMemoryTriageStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.add_case(CASE)
+        self.raced = False
+
+    async def commit(self, case_id: int, step: StepRecord) -> None:
+        if step.status is not None and step.audit.step == "route_guard" and not self.raced:
+            self.raced = True
+            case = self.cases[case_id]
+            self.write_status(case_id, case.change(case.status.park(StateReason.SPAM)))
+        await super().commit(case_id, step)
+
+
+async def test_i10_park_between_read_and_write_kept() -> None:
+    llm = FakeLlm(classes={"I want a refund": REFUND})
+    store = ParkedMidStep()
+
+    await triage(llm, "I want a refund", store=store)
+
+    status = store.status(CASE)
+    assert (status.state, status.reason) == (CaseState.PARKED, StateReason.SPAM)
+    assert store.raced
+    assert [s for s in steps(store) if s.startswith("route_guard")] == ["route_guard:money"]

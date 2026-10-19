@@ -10,3 +10,4 @@ class CaseRecord:
     case_token: str
     status: CaseStatus
     scope: Scope | None
+    version: int

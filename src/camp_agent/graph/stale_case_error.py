@@ -1,0 +1,2 @@
+class StaleCaseError(Exception):
+    pass

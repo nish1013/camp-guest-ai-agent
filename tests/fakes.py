@@ -9,7 +9,14 @@ from camp_agent.domain.case_status import CaseStatus
 from camp_agent.domain.route_guard import Category, Route
 from camp_agent.domain.scope import Scope
 from camp_agent.domain.urgency import Urgency
-from camp_agent.graph.triage_types import CaseSnapshot, StepRecord, TaskAnswer, TaskDraft
+from camp_agent.graph.stale_case_error import StaleCaseError
+from camp_agent.graph.triage_types import (
+    CaseSnapshot,
+    StatusChange,
+    StepRecord,
+    TaskAnswer,
+    TaskDraft,
+)
 from camp_agent.guide.guide_error import GuideError
 from camp_agent.guide.guide_port import GuidePort
 from camp_agent.guide.guide_types import GuideSection
@@ -116,17 +123,23 @@ class InMemoryTriageStore:
         self.audit: list[AuditEntry] = []
 
     def add_case(self, case_id: int, scope: Scope | None = None) -> None:
-        self.cases[case_id] = CaseSnapshot(CaseStatus(), scope)
+        self.cases[case_id] = CaseSnapshot(CaseStatus(), scope, 0)
 
     async def load(self, case_id: int) -> CaseSnapshot:
         return self.cases[case_id]
 
     async def commit(self, case_id: int, step: StepRecord) -> None:
         if step.status is not None:
-            self.cases[case_id] = replace(self.cases[case_id], status=step.status)
+            self.write_status(case_id, step.status)
         self.tasks.extend(step.tasks)
         self.answers.extend(step.answers)
         self.audit.append(step.audit)
+
+    def write_status(self, case_id: int, change: StatusChange) -> None:
+        case = self.cases[case_id]
+        if change.version != case.version:
+            raise StaleCaseError(case_id)
+        self.cases[case_id] = replace(case, status=change.status, version=case.version + 1)
 
     def status(self, case_id: int) -> CaseStatus:
         return self.cases[case_id].status
