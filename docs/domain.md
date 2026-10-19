@@ -81,7 +81,11 @@ As a guest, I want to report a problem in my cabin, so that the right staff fix 
 | --- | --- | --- |
 | scope C12, stay active | "no hot water" | ticket maintenance / urgent for C12. Status "Logged with maintenance". |
 | scope C12 | "can we have extra towels" | ticket housekeeping / can_wait for C12. |
-| open C12 maintenance ticket T7 | a second guest in C12 reports "shower is cold" | linked to T7. No new ticket. Status shows T7's state (D7). |
+| scope C12 | "heater is off and the tap leaks" | "I found 2 issues: heater off, tap leaking. Correct?" Yes: 2 tickets (D39). |
+| scope C12 | "no hot water and the tap leaks" | no confirmation. The urgent fault gets its ticket at once (D39). |
+| open heating report from 14:05 in C12, ticket T7 | a second guest in C12: "heater broken" | the LLM says "maybe the same". "Same problem as the 14:05 heating report?" Yes: linked to T7. No: new ticket T9 (D38). |
+| open heating report "bedroom heater" in C12 | "lounge heater broken" | the LLM says "different". New ticket. No question (D38). |
+| no open report in C12 | two guests report "no hot water" at the same moment | the second report sees the first and gets the "same problem?" question (I4). |
 | scope C12 | the LLM proposes `create_ticket(cabin=C14)` | blocked. One reprompt. Still bad: clarify or hold for a human. `TicketPort` is not called (D15). |
 | the same idempotency key sent twice | retry | one ticket (D5). |
 | no scope | "no hot water" | the step-up form is shown (US7). |
@@ -199,3 +203,31 @@ As staff, I want to restore a parked case, so that a wrong park does not lose a 
 | --- | --- | --- |
 | K5 parked as spam | staff restore | triage runs again. The spam verdict is overridden (D33). |
 | K6 parked after 3 failed verifications | staff confirm the booking by phone, restore, and pick stay C12 | scope set by staff. The run resumes (D33). |
+
+## Invariants
+
+| # | Invariant | Kind | Constraint that keeps it true | Can two requests break it together? |
+| --- | --- | --- | --- | --- |
+| I1 | A message is stored at most once per idempotency key | immediate | unique key on the idempotency key | yes: a client retry |
+| I2 | A case has at most one active run | immediate | lock on the case row. Runs and staff actions both take it | yes: two messages at once |
+| I3 | A ticket is created at most once per case and step | immediate | unique (case, step); `TicketPort.create` is idempotent on it (D5) | yes: a retry or a resumed run |
+| **I4** | **Every report in a cabin records the earlier open reports in that cabin it was checked against; none is missing** | immediate | lock on the cabin row while a report is checked and saved | **yes: the hard one. Two guests in one cabin report at the same moment** |
+| I5 | A ticket's or booking request's cabin is its case's scope cabin | immediate | composite foreign key to the case scope | no |
+| I6 | Every ticket and booking request has a passing validation record for its step | immediate | written in the same transaction | no |
+| I7 | A case scope names its source: QR, step-up or staff | immediate | `CHECK` | no |
+| I8 | A parked case has no tickets or booking requests | immediate | case root, behind the I2 lock | no |
+| I9 | A case flagged safety is urgent and never parked | immediate | `CHECK` | no |
+| I10 | A case with 3 failed verifications is parked, unless staff restored it | immediate | case root, behind the I2 lock | no |
+| I11 | A closed case has no open task | immediate | case root, behind the I2 lock | no |
+| I12 | A task's status matches its ticket's status | eventual | `TicketStatusChanged` handler (D10, D40) | no |
+| I13 | Every routing decision has an audit entry | immediate | written in the same transaction | no |
+
+Not invariants, and where they went:
+
+| Rule | Why it fails the sort test | Goes to |
+| --- | --- | --- |
+| Overdue flag | derived from held time and desk hours; nothing stored | derive on read (D11, D30) |
+| Guest status text | derived from case state | derive on read (D25) |
+| No PII in the audit | about what is not stored | policy, D3 |
+| Rate limit, failed verifications per IP | about a request | AC on US2, US7 |
+| Only staff confirm a booking | precondition | AC on US13 |
