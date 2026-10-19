@@ -17,6 +17,8 @@ REPORT = "report"
 SAME = "same"
 SPECIALIST = "specialist"
 LINK = "link"
+BOOKING = "booking"
+DISPATCH = "dispatch"
 
 
 class TriageState(TypedDict):
@@ -29,6 +31,7 @@ class TriageState(TypedDict):
     failed_step: str
     next: str
     fault: str
+    table: str
     drafts: int
     rejected_for: list[str]
     report: SavedReport | None
@@ -41,14 +44,13 @@ class TriageUpdate(TypedDict, total=False):
     failed_step: str
     next: str
     fault: str
+    table: str
     drafts: int
     rejected_for: list[str]
     report: SavedReport | None
 
 
-def start_state(
-    case_id: int, batch_key: str, text: str, entry: str, fault: str = ""
-) -> TriageState:
+def start_state(case_id: int, batch_key: str, text: str, entry: str) -> TriageState:
     return {
         "case_id": case_id,
         "batch_key": batch_key,
@@ -58,7 +60,8 @@ def start_state(
         "classification": None,
         "failed_step": "",
         "next": entry,
-        "fault": fault,
+        "fault": "",
+        "table": "",
         "drafts": 0,
         "rejected_for": [],
         "report": None,

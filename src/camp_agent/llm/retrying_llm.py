@@ -11,6 +11,8 @@ from camp_agent.llm.llm_types import (
     Classification,
     GuideAnswer,
     SameProblem,
+    TableArgs,
+    TableBrief,
     TicketArgs,
     TicketBrief,
     Verdict,
@@ -42,6 +44,9 @@ class RetryingLlm:
 
     async def draft_ticket(self, team: Team, brief: TicketBrief) -> TicketArgs:
         return await self._attempt(lambda: self._inner.draft_ticket(team, brief))
+
+    async def draft_table(self, brief: TableBrief) -> TableArgs:
+        return await self._attempt(lambda: self._inner.draft_table(brief))
 
     async def _attempt[T](self, call: Callable[[], Awaitable[T]]) -> T:
         for attempt in range(1, self._attempts + 1):

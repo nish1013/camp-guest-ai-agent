@@ -57,10 +57,11 @@ flowchart TD
   Verify -- unclear --> Clarify["clarify, max 2<br/>then hold"]
   Verify -- genuine --> Split["split intents (LLM)"]
   Split --> Classify["per task: classify (LLM)"]
-  Classify --> Guard{"route guard (code)<br/>D36 list, scope?"}
+  Classify --> Guard{"route guard (code)<br/>D36 list, scope?, active stay?"}
   Guard -- money --> Hold["hold for human"]
   Guard -- no scope --> StepUp["step-up form<br/>(task waits for scope)"] --> Guard
   Guard -- question --> Answer["guide answer (LLM)<br/>citation check (code)"]
+  Guard -- "request, no active stay (D19)" --> Answer
   Guard -- fault --> Confirm{"2+ faults,<br/>none urgent?"}
   Confirm -- yes --> AskSplit["guest confirms split<br/>(task waits for the answer)"] --> Report
   Confirm -- no --> Report["save report<br/>(cabin lock, I4)"] --> Same{"same as an open<br/>report? (LLM)"}
@@ -70,7 +71,7 @@ flowchart TD
   Args --> Validate{"validate (code)<br/>schema, tool, scope"}
   Validate -- pass --> Ticket["TicketPort.create<br/>key: case + step"]
   Validate -- block --> Reprompt["reprompt once,<br/>then hold"]
-  Guard -- table --> Booking["restaurant args (LLM)<br/>validate, booking request"]
+  Guard -- table --> Booking["restaurant args (LLM)<br/>validate (code), reprompt once<br/>booking request (case lock, I8)"]
 ```
 
 ## Data

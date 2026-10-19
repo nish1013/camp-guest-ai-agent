@@ -176,7 +176,7 @@ async def test_us2_two_intents_two_tasks() -> None:
 
     assert [(t.step_id, t.kind, t.state) for t in store.tasks] == [
         ("m1/t0", TaskKind.FAULT, TaskState.TICKETED),
-        ("m1/t1", TaskKind.TABLE, TaskState.QUEUED),
+        ("m1/t1", TaskKind.TABLE, TaskState.BOOKING_REQUESTED),
     ]
     assert store.status(CASE).urgency is Urgency.URGENT
     assert steps(store) == [
@@ -189,6 +189,7 @@ async def test_us2_two_intents_two_tasks() -> None:
         "route_guard:table",
         "same:none",
         "ticket:created",
+        "booking:requested",
     ]
 
 

@@ -1,3 +1,4 @@
+import datetime as dt
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -48,4 +49,22 @@ class TicketArgs(BaseModel):
 class TicketBrief:
     fault: str
     cabin: str
+    rejected_for: tuple[str, ...] = ()
+
+
+class TableArgs(BaseModel):
+    tool: str
+    cabin: str
+    party: int | None
+    date: dt.date | None
+    time: dt.time | None
+
+
+@dataclass(frozen=True)
+class TableBrief:
+    request: str
+    cabin: str
+    today: dt.date
+    stay_from: dt.date
+    stay_to: dt.date
     rejected_for: tuple[str, ...] = ()

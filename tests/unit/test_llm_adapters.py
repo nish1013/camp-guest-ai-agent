@@ -1,4 +1,5 @@
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, date, datetime, time
 
 import pytest
 from pydantic_ai.messages import ModelMessage, ModelResponse
@@ -12,11 +13,18 @@ from camp_agent.domain.specialist import Team
 from camp_agent.domain.urgency import Urgency
 from camp_agent.guide.guide_types import GuideSection
 from camp_agent.llm.llm_error import LlmError
-from camp_agent.llm.llm_prompts import answer_input, same_problem_input, ticket_input
+from camp_agent.llm.llm_prompts import (
+    answer_input,
+    same_problem_input,
+    table_input,
+    ticket_input,
+)
 from camp_agent.llm.llm_types import (
     Classification,
     GuideAnswer,
     SameProblem,
+    TableArgs,
+    TableBrief,
     TicketArgs,
     TicketBrief,
     Verdict,
@@ -128,4 +136,44 @@ def test_d15_reprompt_names_reasons() -> None:
         "Guest cabin: C12",
         "Guest fault: heater off",
         "Your last draft was rejected: cabin must be C12.",
+    ]
+
+
+TABLE_BRIEF = TableBrief(
+    "table for 4 at 19:30 tonight",
+    "C12",
+    date(2026, 10, 19),
+    date(2026, 10, 18),
+    date(2026, 10, 25),
+)
+
+
+async def test_d15_table_args_parsed() -> None:
+    args = {"tool": "request_table", "cabin": "C12", "party": 4, "date": "2026-10-19"}
+    model = TestModel(custom_output_args=args | {"time": "19:30"})
+
+    drafted = await PydanticAiLlm(model, timeout_s=1).draft_table(TABLE_BRIEF)
+
+    assert drafted == TableArgs(
+        tool="request_table", cabin="C12", party=4, date=date(2026, 10, 19), time=time(19, 30)
+    )
+
+
+async def test_d15_table_missing_detail_parsed() -> None:
+    args = {"tool": "request_table", "cabin": "C12", "party": None, "date": None, "time": None}
+
+    drafted = await PydanticAiLlm(TestModel(custom_output_args=args), 1).draft_table(TABLE_BRIEF)
+
+    assert (drafted.party, drafted.date, drafted.time) == (None, None, None)
+
+
+def test_d15_table_input_gives_dates() -> None:
+    text = table_input(replace(TABLE_BRIEF, rejected_for=("party must be 1 to 12",)))
+
+    assert text.splitlines() == [
+        "Guest cabin: C12",
+        "Today: 2026-10-19",
+        "Stay: 2026-10-18 to 2026-10-25",
+        "Guest request: table for 4 at 19:30 tonight",
+        "Your last draft was rejected: party must be 1 to 12.",
     ]

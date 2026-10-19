@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import exists, select, update
+from sqlalchemy import and_, exists, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -10,6 +10,7 @@ from camp_agent.db.tables import tasks
 from camp_agent.domain.fault_flow import ACTIONABLE, FaultTask
 from camp_agent.domain.fault_type import FaultType
 from camp_agent.domain.route_guard import Category, TaskKind, TaskState
+from camp_agent.domain.table_flow import TO_BOOK, TableBooking, TableTask
 from camp_agent.domain.urgency import Urgency
 from camp_agent.graph.triage_types import TaskAnswer, TaskDraft, TaskTransition, WaitingTask
 
@@ -94,16 +95,39 @@ class TaskRepository:
             for row in rows
         ]
 
+    async def tables(self, case_id: int) -> list[TableTask]:
+        query = (
+            select(tasks.c.step_id, tasks.c.state, tasks.c.summary)
+            .where(tasks.c.case_id == case_id, tasks.c.kind == TaskKind.TABLE)
+            .order_by(tasks.c.id)
+        )
+        rows = (await self._conn.execute(query)).all()
+        return [TableTask(row.step_id, TaskState(row.state), row.summary) for row in rows]
+
+    async def booking_requests(self, case_id: int) -> list[TableBooking]:
+        query = (
+            select(tasks.c.cabin, tasks.c.booking_party, tasks.c.booking_date, tasks.c.booking_time)
+            .where(tasks.c.case_id == case_id, tasks.c.state == TaskState.BOOKING_REQUESTED)
+            .order_by(tasks.c.id)
+        )
+        rows = (await self._conn.execute(query)).all()
+        return [
+            TableBooking(row.cabin, row.booking_party, row.booking_date, row.booking_time)
+            for row in rows
+        ]
+
     async def states(self, case_id: int) -> list[TaskState]:
         query = select(tasks.c.state).where(tasks.c.case_id == case_id)
         return [TaskState(state) for state in (await self._conn.execute(query)).scalars()]
 
-    async def has_actionable_faults(self, case_id: int) -> bool:
+    async def has_actionable(self, case_id: int) -> bool:
         query = select(
             exists().where(
                 tasks.c.case_id == case_id,
-                tasks.c.kind == TaskKind.FAULT,
-                tasks.c.state.in_(ACTIONABLE),
+                or_(
+                    and_(tasks.c.kind == TaskKind.FAULT, tasks.c.state.in_(ACTIONABLE)),
+                    and_(tasks.c.kind == TaskKind.TABLE, tasks.c.state.in_(TO_BOOK)),
+                ),
             )
         )
         found: bool = (await self._conn.execute(query)).scalar_one()
@@ -119,6 +143,13 @@ class TaskRepository:
                 "ticket_status": transition.ticket.status,
                 "ticket_version": transition.ticket.version,
                 "cabin": transition.ticket.cabin,
+            }
+        if transition.booking is not None:
+            values |= {
+                "cabin": transition.booking.cabin,
+                "booking_party": transition.booking.party,
+                "booking_date": transition.booking.day,
+                "booking_time": transition.booking.at,
             }
         moved = await self._conn.execute(
             update(tasks)

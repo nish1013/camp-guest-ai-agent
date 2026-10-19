@@ -26,6 +26,7 @@ from camp_agent.http import guest, health
 from camp_agent.http.guest import GuestServices
 from camp_agent.intake.find_open_case import FindOpenCase
 from camp_agent.intake.list_answers import ListAnswers
+from camp_agent.intake.list_bookings import ListBookings
 from camp_agent.intake.list_faults import ListFaults
 from camp_agent.intake.rate_limiter import SlidingWindowLimiter
 from camp_agent.intake.run_coordinator import RunCoordinator
@@ -73,7 +74,12 @@ def create_app(
             retrying_llm,
             PgTriageStore(engine),
             resolved_clock,
-            TriagePolicy(safety, frozenset(resolved.held_categories), resolved.clarify_max_rounds),
+            TriagePolicy(
+                safety,
+                frozenset(resolved.held_categories),
+                resolved.clarify_max_rounds,
+                ZoneInfo(resolved.camp_timezone),
+            ),
             GuideAnswerer(retrying_llm, guide_port, guide_copy.reception),
             RetryingTickets(
                 tickets or DemoTickets(engine),
@@ -97,6 +103,7 @@ def create_app(
             find_open_case=FindOpenCase(engine),
             list_answers=ListAnswers(engine),
             list_faults=ListFaults(engine, ZoneInfo(resolved.camp_timezone)),
+            list_bookings=ListBookings(engine),
             coordinator=RunCoordinator(
                 engine, triage, resolved_clock, timedelta(seconds=resolved.run_lease_s)
             ),

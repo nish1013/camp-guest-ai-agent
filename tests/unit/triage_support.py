@@ -11,6 +11,7 @@ from camp_agent.graph.triage_graph import PendingMessage
 from camp_agent.graph.triage_types import TriagePolicy
 from camp_agent.llm.llm_types import Classification
 from tests.fakes import (
+    CAMP_TZ,
     FakeLlm,
     FakeTickets,
     InMemoryTriageStore,
@@ -25,6 +26,7 @@ POLICY = TriagePolicy(
     SafetyRule(DEFAULTS.safety_terms),
     frozenset(DEFAULTS.held_categories),
     DEFAULTS.clarify_max_rounds,
+    CAMP_TZ,
 )
 CASE = 1
 RECEPTION = "Call reception on 01632 960123."

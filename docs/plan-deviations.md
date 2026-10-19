@@ -102,3 +102,10 @@ Built:    a case is in action once one of its tasks has a ticket or a booking re
 Why:      a spam verdict on a follow-up parked a case with an open ticket, against I8; decisions.md D13 parks spam. A safety hit still marks the case urgent and shows the guidance (I9). Chosen on 2026-10-19 in review.
 Undo:     drop the entry check in the safety step and the park check; every follow-up is then triaged and a spam verdict can park a case in action.
 Closed:   2026-10-19. Added to decisions.md as part of D4 (amended).
+
+## D15. Booking requests are drafted after every intent is routed (PR 7, 2026-10-19)
+
+Plan:     Request and graph flow: "per task: classify (LLM) -> route guard (code) ... table -> restaurant args (LLM) -> validate (code) -> booking request".
+Built:    classify and the route guard run per intent and save each task. Once every intent of the message is saved, a dispatch step takes the next saved task with work: faults first, then tables. The same step picks up a table that waited for scope, after a step-up.
+Why:      the fault lane already starts only after the route guard, so the split check sees every fault of the message (D10). One dispatch over saved tasks serves a new message, an answer and a step-up resume alike (D7). Faults go first because urgent work jumps the queue; a booking request waits for staff in any case (D12).
+Undo:     call the table desk from the route guard node for a queued table task, and give tables that waited for scope a resume path of their own.

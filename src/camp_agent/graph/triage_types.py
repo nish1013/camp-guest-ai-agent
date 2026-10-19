@@ -1,13 +1,16 @@
 from collections.abc import Mapping, Set
 from dataclasses import dataclass
+from zoneinfo import ZoneInfo
 
 from camp_agent.domain.arg_validation import ValidationOutcome
 from camp_agent.domain.audit_entry import AuditEntry
+from camp_agent.domain.case_state import StateReason
 from camp_agent.domain.case_status import CaseStatus
 from camp_agent.domain.fault_type import FaultType
 from camp_agent.domain.route_guard import Category, TaskKind, TaskState
 from camp_agent.domain.safety_rule import SafetyRule
 from camp_agent.domain.scope import Scope
+from camp_agent.domain.table_flow import TableBooking
 from camp_agent.domain.ticket_status import TicketStatus
 from camp_agent.domain.urgency import Urgency
 
@@ -77,13 +80,23 @@ class TaskTransition:
     expected: TaskState
     same_report_id: int | None = None
     ticket: TicketLink | None = None
+    booking: TableBooking | None = None
 
 
 @dataclass(frozen=True)
 class ValidationRecord:
     step_id: str
     outcome: ValidationOutcome
-    args: Mapping[str, str]
+    args: Mapping[str, str | int | None]
+
+
+@dataclass(frozen=True)
+class TaskHold:
+    step_id: str
+    expected: TaskState
+    reason: StateReason
+    audit: AuditEntry
+    record: ValidationRecord | None = None
 
 
 @dataclass(frozen=True)
@@ -101,3 +114,4 @@ class TriagePolicy:
     safety: SafetyRule
     held_categories: Set[str]
     clarify_max_rounds: int
+    camp_timezone: ZoneInfo

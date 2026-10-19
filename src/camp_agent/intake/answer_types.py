@@ -26,6 +26,12 @@ class TicketLine:
 
 
 @dataclass(frozen=True)
+class BookingLine:
+    request: str
+    status: str
+
+
+@dataclass(frozen=True)
 class QuestionView:
     confirmation: Confirmation
     subject: str
