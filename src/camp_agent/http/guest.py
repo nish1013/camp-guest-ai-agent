@@ -1,7 +1,7 @@
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request, status
@@ -13,6 +13,7 @@ from camp_agent.clock import Clock
 from camp_agent.config import Settings
 from camp_agent.db.answered_question import AnsweredQuestion
 from camp_agent.db.case_record import CaseRecord
+from camp_agent.domain.fault_flow import Confirmation
 from camp_agent.domain.guest_status import (
     BOOKING_FOUND,
     BOOKINGS_DOWN,
@@ -21,12 +22,15 @@ from camp_agent.domain.guest_status import (
 )
 from camp_agent.domain.scope import Scope
 from camp_agent.guide.guide_types import GuideCopy
+from camp_agent.intake.answer_types import AnswerCommand, CaseFaults
 from camp_agent.intake.find_open_case import FindOpenCase
 from camp_agent.intake.intake_types import Accepted, SubmitMessageCommand
 from camp_agent.intake.list_answers import ListAnswers
+from camp_agent.intake.list_faults import ListFaults
 from camp_agent.intake.run_coordinator import RunCoordinator
 from camp_agent.intake.step_up_form import StepUpForm
 from camp_agent.intake.step_up_types import StepUpCommand, StepUpResult
+from camp_agent.intake.submit_answer import SubmitAnswer
 from camp_agent.intake.submit_message import SubmitMessage
 from camp_agent.intake.submit_step_up import SubmitStepUp
 from camp_agent.qr.qr_token import QrOutcome, QrTokens
@@ -43,6 +47,7 @@ MessageText = Annotated[
 CabinHint = Annotated[str, StringConstraints(strip_whitespace=True, max_length=16)]
 Surname = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 BookingRef = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]
+Subject = Annotated[str, StringConstraints(pattern=r"^m\d+(/t\d+)?$", max_length=40)]
 
 
 @dataclass(frozen=True)
@@ -50,6 +55,7 @@ class CaseView:
     link: str
     status: str
     answers: list[AnsweredQuestion]
+    faults: CaseFaults
     step_up: bool
 
 
@@ -62,9 +68,11 @@ class GuestServices:
     submit: SubmitMessage
     find_open_case: FindOpenCase
     list_answers: ListAnswers
+    list_faults: ListFaults
     coordinator: RunCoordinator
     step_up: SubmitStepUp
     step_up_form: StepUpForm
+    answer: SubmitAnswer
 
 
 log = logging.getLogger(__name__)
@@ -185,6 +193,28 @@ async def step_up(
     )
 
 
+@router.post("/c/{case_token}/answer", response_class=HTMLResponse)
+async def answer(
+    request: Request,
+    background: BackgroundTasks,
+    services: Services,
+    case_token: str,
+    confirmation: Annotated[Confirmation, Form()],
+    subject: Annotated[Subject, Form()],
+    answer: Annotated[Literal["yes", "no"], Form()],
+) -> HTMLResponse:
+    reply = await services.answer(
+        AnswerCommand(case_token, confirmation, subject, yes=answer == "yes")
+    )
+    if reply is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    if reply.moved:
+        background.add_task(services.coordinator.drive, reply.case.id)
+    return templates.TemplateResponse(
+        request, "_case_status.html", {"case": await _view(reply.case, services)}
+    )
+
+
 async def _page(request: Request, services: GuestServices) -> HTMLResponse:
     case = None
     token = request.cookies.get(CASE_COOKIE)
@@ -215,6 +245,7 @@ async def _view(case: CaseRecord, services: GuestServices) -> CaseView:
             case.status, services.guide_copy.emergency, services.guide_copy.reception
         ),
         answers=await services.list_answers(case.id),
+        faults=await services.list_faults(case.id),
         step_up=await services.step_up_form.shown(case),
     )
 

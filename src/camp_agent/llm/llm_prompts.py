@@ -1,6 +1,9 @@
 from collections.abc import Sequence
 
+from camp_agent.domain.cabin_reports import OpenReport
+from camp_agent.domain.specialist import Team
 from camp_agent.guide.guide_types import GuideSection
+from camp_agent.llm.llm_types import TicketBrief
 
 _CONTEXT = (
     "You help triage messages sent by guests of a holiday camp to its 24x7 assistant."
@@ -30,7 +33,27 @@ CLASSIFY = (
     " cabin moves and anything else a person must decide."
     " urgency: urgent for no hot water, no heating in cold weather, leaks or anything unsafe;"
     " can_wait for routine requests such as towels; otherwise normal."
+    " fault_type: for the fault route, the kind of fault; otherwise null."
 )
+
+SAME_PROBLEM = (
+    f"{_CONTEXT} A guest reported a fault in their cabin. Earlier reports in the same cabin are"
+    " still open. Each starts with its id in square brackets. Set report_id to the id of the one"
+    " earlier report that may describe the same job, or to null when every earlier report is a"
+    " different job. The same fault in a different room or on a different appliance is a"
+    " different job."
+)
+
+_SPECIALIST = (
+    f"{_CONTEXT} Draft one ticket for the guest fault given. Set tool to create_ticket, cabin to"
+    " the guest cabin given, and summary to a short job description for staff, in plain English."
+    " Never add a detail the guest did not give."
+)
+
+SPECIALISTS = {
+    Team.MAINTENANCE: f"You are the camp's maintenance specialist. {_SPECIALIST}",
+    Team.HOUSEKEEPING: f"You are the camp's housekeeping specialist. {_SPECIALIST}",
+}
 
 ANSWER = (
     f"{_CONTEXT} Answer the guest's question using only the camp guide sections given."
@@ -44,3 +67,15 @@ ANSWER = (
 def answer_input(question: str, sections: Sequence[GuideSection]) -> str:
     guide = "\n\n".join(f"[{s.id}] {s.title}\n{s.body}" for s in sections)
     return f"Camp guide sections:\n\n{guide}\n\nGuest question: {question}"
+
+
+def same_problem_input(fault: str, earlier: Sequence[OpenReport]) -> str:
+    reports = "\n".join(f"[{r.id}] {r.fault_type}: {r.summary}" for r in earlier)
+    return f"Earlier open reports:\n{reports}\n\nNew report: {fault}"
+
+
+def ticket_input(brief: TicketBrief) -> str:
+    text = f"Guest cabin: {brief.cabin}\nGuest fault: {brief.fault}"
+    if brief.rejected_for:
+        text += f"\nYour last draft was rejected: {'; '.join(brief.rejected_for)}."
+    return text

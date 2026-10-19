@@ -35,6 +35,12 @@ class TaskState(StrEnum):
     AWAITING_SCOPE = "awaiting_scope"
     HELD = "held"
     DONE = "done"
+    AWAITING_SPLIT = "awaiting_split"
+    SPLIT_CONFIRMED = "split_confirmed"
+    AWAITING_SAME = "awaiting_same"
+    DRAFTING = "drafting"
+    LINKING = "linking"
+    TICKETED = "ticketed"
 
 
 @dataclass(frozen=True)

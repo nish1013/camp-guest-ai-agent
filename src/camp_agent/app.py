@@ -26,10 +26,12 @@ from camp_agent.http import guest, health
 from camp_agent.http.guest import GuestServices
 from camp_agent.intake.find_open_case import FindOpenCase
 from camp_agent.intake.list_answers import ListAnswers
+from camp_agent.intake.list_faults import ListFaults
 from camp_agent.intake.rate_limiter import SlidingWindowLimiter
 from camp_agent.intake.run_coordinator import RunCoordinator
 from camp_agent.intake.step_up_form import StepUpForm
 from camp_agent.intake.step_up_types import StepUpLimits
+from camp_agent.intake.submit_answer import SubmitAnswer
 from camp_agent.intake.submit_message import SubmitMessage
 from camp_agent.intake.submit_step_up import SubmitStepUp
 from camp_agent.llm.llm_port import LlmPort
@@ -38,6 +40,9 @@ from camp_agent.llm.retrying_llm import RetryingLlm
 from camp_agent.qr.qr_token import QrTokens
 from camp_agent.stay.seed_stays import SeedStays
 from camp_agent.stay.stay_port import StayContextPort
+from camp_agent.ticket.demo_tickets import DemoTickets
+from camp_agent.ticket.retrying_tickets import RetryingTickets
+from camp_agent.ticket.ticket_port import TicketPort
 
 
 def create_app(
@@ -47,6 +52,7 @@ def create_app(
     llm: LlmPort | None = None,
     guide: GuidePort | None = None,
     stays: StayContextPort | None = None,
+    tickets: TicketPort | None = None,
 ) -> FastAPI:
     resolved = settings or Settings()
     resolved_clock = clock or SystemClock(ZoneInfo(resolved.camp_timezone))
@@ -69,6 +75,11 @@ def create_app(
             resolved_clock,
             TriagePolicy(safety, frozenset(resolved.held_categories), resolved.clarify_max_rounds),
             GuideAnswerer(retrying_llm, guide_port, guide_copy.reception),
+            RetryingTickets(
+                tickets or DemoTickets(engine),
+                resolved.ticket_attempts,
+                resolved.ticket_retry_delay_s,
+            ),
         )
         limits = StepUpLimits(
             resolved.step_up_case_failures,
@@ -85,11 +96,13 @@ def create_app(
             submit=SubmitMessage(engine, limiter, resolved_clock, safety),
             find_open_case=FindOpenCase(engine),
             list_answers=ListAnswers(engine),
+            list_faults=ListFaults(engine, ZoneInfo(resolved.camp_timezone)),
             coordinator=RunCoordinator(
                 engine, triage, resolved_clock, timedelta(seconds=resolved.run_lease_s)
             ),
             step_up=SubmitStepUp(engine, stay_port, resolved_clock, limits),
             step_up_form=StepUpForm(engine, resolved.step_up_case_failures),
+            answer=SubmitAnswer(engine, resolved_clock),
         )
         yield
         await engine.dispose()

@@ -2,10 +2,19 @@ from collections.abc import Awaitable, Callable, Sequence
 
 import anyio
 
+from camp_agent.domain.cabin_reports import OpenReport
+from camp_agent.domain.specialist import Team
 from camp_agent.guide.guide_types import GuideSection
 from camp_agent.llm.llm_error import LlmError
 from camp_agent.llm.llm_port import LlmPort
-from camp_agent.llm.llm_types import Classification, GuideAnswer, Verdict
+from camp_agent.llm.llm_types import (
+    Classification,
+    GuideAnswer,
+    SameProblem,
+    TicketArgs,
+    TicketBrief,
+    Verdict,
+)
 
 
 class RetryingLlm:
@@ -27,6 +36,12 @@ class RetryingLlm:
 
     async def answer(self, question: str, sections: Sequence[GuideSection]) -> GuideAnswer:
         return await self._attempt(lambda: self._inner.answer(question, sections))
+
+    async def same_problem(self, fault: str, earlier: Sequence[OpenReport]) -> SameProblem:
+        return await self._attempt(lambda: self._inner.same_problem(fault, earlier))
+
+    async def draft_ticket(self, team: Team, brief: TicketBrief) -> TicketArgs:
+        return await self._attempt(lambda: self._inner.draft_ticket(team, brief))
 
     async def _attempt[T](self, call: Callable[[], Awaitable[T]]) -> T:
         for attempt in range(1, self._attempts + 1):

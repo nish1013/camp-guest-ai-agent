@@ -66,3 +66,38 @@ Built:    the 3rd failure parks the case, held work included. A case flagged saf
 Why:      I9 says a safety case is never parked, and D8 puts safety first. The stored failure count, not the park, is what stops further guessing, so the limit still holds on a safety case.
 Undo:     none needed in code; I10 in domain.md would read "unless staff restored it or it is flagged safety".
 Closed:   PR 5, 2026-10-19. I10 in domain.md now reads "unless staff restored it or it is flagged safety".
+
+## D10. Confirmations are saved task states, not graph interrupts (PR 6, 2026-10-19)
+
+Plan:     Request and graph flow: "split intents (LLM) -> 2+ faults, none urgent -> confirm split (interrupt)" and "same? (LLM) -> confirm (interrupt)".
+Built:    the split check runs after classify and the route guard, over each message's fault tasks. A task waiting for an answer is saved as `awaiting_split` or `awaiting_same`. `POST /c/{case_token}/answer` moves it, and the next run under the run lease (I2) goes on from there. A "no" to the split holds the tasks for a human. `tasks` also has `same_report_id`, the report the guest is asked about.
+Why:      fault kind and urgency are known only after classify, so "2+ faults, none urgent" cannot be decided before it. An interrupt pauses the whole run, which D7 already ruled out, and no checkpointer exists to resume one. A wrong split is what D39 guards against, so a "no" goes to a person, not back through the LLM.
+Undo:     move the check before classify with an LLM call of its own; add the checkpointer and `interrupt()` as in D7's undo.
+
+## D11. The report step writes no audit entry (PR 6, 2026-10-19)
+
+Plan:     Request and graph flow: "each step: one aggregate, one audit entry (D44, I13)".
+Built:    the report step saves only the report, under the cabin lock. The next step, "same problem?", writes the audit entry. It names the report and every report it was checked against.
+Why:      audit entries belong to the Case aggregate, the report to CabinReports. One transaction for both breaks D44. The report row is insert-only and holds its own checked-against list, so the step loses no record.
+Undo:     write an audit entry in the report transaction, with two aggregates in it.
+
+## D12. Fault types are an enum in code (PR 6, 2026-10-19)
+
+Plan:     domain.md, Words used: "Fault type: A closed list in config".
+Built:    `FaultType` in `domain/fault_type.py`. Classify proposes it; a `CHECK` on `tasks` and `reports` holds the same list.
+Why:      the LLM output schema carries the list, so the LLM cannot return a type outside it (D15, D48). A list in config would need the schema built at start-up, and no story asks to change the list.
+Undo:     move the values to `Settings` and build the classification schema from them at start-up.
+
+## D13. The ticket step holds the case row from the park check to the commit (PR 6, 2026-10-19)
+
+Plan:     domain.md, I8: "case root; version number on the case". The hard part names one lock: the cabin lock for I4.
+Built:    after the args pass validation, the ticket step locks the case row (`FOR NO KEY UPDATE`), checks the case is not parked, calls `TicketPort.create`, and saves the ticket in that transaction. The LLM draft runs before the lock.
+Why:      the version check alone rejects the ticket row on a parked case, but `create` has already sent the ticket. Every park is an `UPDATE` of the case row, so it now waits for the commit and then loses the version check. A park that commits first is seen before `create`. The lock covers one aggregate and no LLM call, so D44 and D46 hold. The create stays keyed by case and step (I3).
+Undo:     drop `lock_case` and save the ticket with the version check alone; a park between `create` and the commit then leaves a ticket sent for a parked case.
+
+## D14. A follow-up on a case in action runs only the safety rule (PR 6, 2026-10-19)
+
+Plan:     US2: "cookie holds open case K1 | 'also the heater is off' | the message joins K1." Request and graph flow: every message goes through verify, split, classify and the route guard.
+Built:    a case is in action once one of its tasks has a ticket or a booking request. A new message on such a case runs only the D8 safety rule. It joins the case for staff to read, with a `safety: joined` audit entry: no LLM call, no park, no new task. A case with an open question to the guest (clarify, step-up, split or same-problem) is still triaged, as before. The park step refuses a case in action. The rule is `domain/case_activity.py`, used at the graph entry and in the park step.
+Why:      a spam verdict on a follow-up parked a case with an open ticket, against I8; decisions.md D13 parks spam. A safety hit still marks the case urgent and shows the guidance (I9). Chosen on 2026-10-19 in review.
+Undo:     drop the entry check in the safety step and the park check; every follow-up is then triaged and a spam verdict can park a case in action.

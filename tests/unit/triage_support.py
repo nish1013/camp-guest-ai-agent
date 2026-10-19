@@ -10,7 +10,14 @@ from camp_agent.graph.langgraph_triage import LangGraphTriage
 from camp_agent.graph.triage_graph import PendingMessage
 from camp_agent.graph.triage_types import TriagePolicy
 from camp_agent.llm.llm_types import Classification
-from tests.fakes import FakeLlm, InMemoryTriageStore, SwitchableGuide, demo_guide, oct_19
+from tests.fakes import (
+    FakeLlm,
+    FakeTickets,
+    InMemoryTriageStore,
+    SwitchableGuide,
+    demo_guide,
+    oct_19,
+)
 
 DEFAULTS = Settings()
 C12 = Scope("C12", date(2026, 10, 18), date(2026, 10, 25), ScopeSource.QR)
@@ -34,10 +41,13 @@ def new_store(scope: Scope | None = C12) -> InMemoryTriageStore:
 
 
 def graph_for(
-    llm: FakeLlm, store: InMemoryTriageStore, guide: SwitchableGuide | None = None
+    llm: FakeLlm,
+    store: InMemoryTriageStore,
+    guide: SwitchableGuide | None = None,
+    tickets: FakeTickets | None = None,
 ) -> LangGraphTriage:
     answerer = GuideAnswerer(llm, guide or demo_guide(), RECEPTION)
-    return LangGraphTriage(llm, store, oct_19(), POLICY, answerer)
+    return LangGraphTriage(llm, store, oct_19(), POLICY, answerer, tickets or FakeTickets())
 
 
 async def triage(
@@ -45,9 +55,10 @@ async def triage(
     *texts: str,
     store: InMemoryTriageStore | None = None,
     guide: SwitchableGuide | None = None,
+    tickets: FakeTickets | None = None,
 ) -> InMemoryTriageStore:
     store = store or new_store()
-    graph = graph_for(llm, store, guide)
+    graph = graph_for(llm, store, guide, tickets)
     for i, text in enumerate(texts, start=1):
         await graph.run(CASE, [PendingMessage(i, text)])
     return store

@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from typing import Any
 
 from sqlalchemy import exists, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -6,7 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from camp_agent.db.answered_question import AnsweredQuestion
 from camp_agent.db.tables import tasks
+from camp_agent.domain.fault_flow import ACTIONABLE, FaultTask
+from camp_agent.domain.fault_type import FaultType
 from camp_agent.domain.route_guard import Category, TaskKind, TaskState
+from camp_agent.domain.urgency import Urgency
 from camp_agent.graph.triage_types import TaskAnswer, TaskDraft, TaskTransition, WaitingTask
 
 
@@ -26,6 +30,7 @@ class TaskRepository:
                 "urgency": draft.urgency,
                 "state": draft.state,
                 "summary": draft.summary,
+                "fault_type": draft.fault_type,
             }
             for draft in drafts
         ]
@@ -69,14 +74,60 @@ class TaskRepository:
         found: bool = (await self._conn.execute(query)).scalar_one()
         return found
 
-    async def resume(self, case_id: int, transitions: Sequence[TaskTransition]) -> None:
-        for transition in transitions:
-            await self._conn.execute(
-                update(tasks)
-                .where(
-                    tasks.c.case_id == case_id,
-                    tasks.c.step_id == transition.step_id,
-                    tasks.c.state == TaskState.AWAITING_SCOPE,
-                )
-                .values(state=transition.state)
+    async def faults(self, case_id: int) -> list[FaultTask]:
+        query = (
+            select(tasks)
+            .where(tasks.c.case_id == case_id, tasks.c.kind == TaskKind.FAULT)
+            .order_by(tasks.c.id)
+        )
+        rows = (await self._conn.execute(query)).all()
+        return [
+            FaultTask(
+                row.step_id,
+                TaskState(row.state),
+                Category(row.category),
+                FaultType(row.fault_type),
+                Urgency(row.urgency),
+                row.summary,
+                row.same_report_id,
             )
+            for row in rows
+        ]
+
+    async def states(self, case_id: int) -> list[TaskState]:
+        query = select(tasks.c.state).where(tasks.c.case_id == case_id)
+        return [TaskState(state) for state in (await self._conn.execute(query)).scalars()]
+
+    async def has_actionable_faults(self, case_id: int) -> bool:
+        query = select(
+            exists().where(
+                tasks.c.case_id == case_id,
+                tasks.c.kind == TaskKind.FAULT,
+                tasks.c.state.in_(ACTIONABLE),
+            )
+        )
+        found: bool = (await self._conn.execute(query)).scalar_one()
+        return found
+
+    async def transition(self, case_id: int, transition: TaskTransition) -> bool:
+        values: dict[str, Any] = {"state": transition.state}
+        if transition.same_report_id is not None:
+            values["same_report_id"] = transition.same_report_id
+        if transition.ticket is not None:
+            values |= {
+                "ticket_ref": transition.ticket.ref,
+                "ticket_status": transition.ticket.status,
+                "ticket_version": transition.ticket.version,
+                "cabin": transition.ticket.cabin,
+            }
+        moved = await self._conn.execute(
+            update(tasks)
+            .where(
+                tasks.c.case_id == case_id,
+                tasks.c.step_id == transition.step_id,
+                tasks.c.state == transition.expected,
+            )
+            .values(values)
+            .returning(tasks.c.id)
+        )
+        return moved.one_or_none() is not None

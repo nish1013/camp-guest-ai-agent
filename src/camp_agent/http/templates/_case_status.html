@@ -7,5 +7,9 @@
   {% if answer.section_id %}<p><small>From the camp guide: <span data-cited>{{ answer.section_id }}</span></small></p>{% endif %}
 </article>
 {% endfor %}
+{% for line in case.faults.tickets %}
+<p data-ticket><em>{{ line.fault }}</em>: {{ line.status }}</p>
+{% endfor %}
+{% for question in case.faults.questions %}{% include "_question.html" %}{% endfor %}
 {% if case.step_up %}{% include "_step_up.html" %}{% endif %}
 <p><a href="{{ case.link }}" data-case-link>Your case link</a></p>

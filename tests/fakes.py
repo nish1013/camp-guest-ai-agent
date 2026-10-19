@@ -1,21 +1,30 @@
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from camp_agent.config import Settings
 from camp_agent.domain.audit_entry import AuditEntry
+from camp_agent.domain.cabin_reports import OpenReport, ReportDraft, SavedReport
 from camp_agent.domain.case_status import CaseStatus
-from camp_agent.domain.route_guard import Category, Route, TaskState
+from camp_agent.domain.fault_flow import FaultTask
+from camp_agent.domain.fault_type import FaultType
+from camp_agent.domain.route_guard import Category, Route, TaskKind, TaskState
 from camp_agent.domain.scope import Scope
+from camp_agent.domain.specialist import Team
+from camp_agent.domain.ticket_status import CLOSED_TICKET_STATES, TicketStatus
 from camp_agent.domain.urgency import Urgency
 from camp_agent.graph.stale_case_error import StaleCaseError
 from camp_agent.graph.triage_types import (
     CaseSnapshot,
+    LinkTarget,
     StatusChange,
     StepRecord,
     TaskAnswer,
     TaskDraft,
+    TicketLink,
+    ValidationRecord,
     WaitingTask,
 )
 from camp_agent.guide.guide_error import GuideError
@@ -23,11 +32,20 @@ from camp_agent.guide.guide_port import GuidePort
 from camp_agent.guide.guide_types import GuideSection
 from camp_agent.guide.markdown_guide import MarkdownGuide, parse_guide
 from camp_agent.llm.llm_error import LlmError
-from camp_agent.llm.llm_types import Classification, GuideAnswer, Verdict
+from camp_agent.llm.llm_types import (
+    Classification,
+    GuideAnswer,
+    SameProblem,
+    TicketArgs,
+    TicketBrief,
+    Verdict,
+)
 from camp_agent.stay.seed_stays import SeedStays
 from camp_agent.stay.stay_error import StayError
 from camp_agent.stay.stay_port import StayContextPort
 from camp_agent.stay.stay_types import Booking
+from camp_agent.ticket.ticket_error import TicketError
+from camp_agent.ticket.ticket_types import TicketKey, TicketReceipt, TicketRequest
 
 CAMP_TZ = ZoneInfo("Europe/London")
 QUESTION = Classification(
@@ -87,13 +105,19 @@ class FakeLlm:
         splits: dict[str, list[str]] | None = None,
         classes: dict[str, Classification] | None = None,
         answers: dict[str, GuideAnswer] | None = None,
+        same: dict[str, int] | None = None,
+        drafts: dict[str, list[TicketArgs]] | None = None,
         down: bool = False,
     ) -> None:
         self._verdicts = verdicts or {}
         self._splits = splits or {}
         self._classes = classes or {}
         self._answers = answers or {}
+        self._same = same or {}
+        self._drafts = drafts or {}
         self._down = down
+        self.down_for: set[str] = set()
+        self.briefs: list[TicketBrief] = []
         self.calls: list[str] = []
         self.inputs: list[str] = []
         self.offered: list[str] = []
@@ -115,10 +139,22 @@ class FakeLlm:
         self.offered = [section.id for section in sections]
         return self._answers.get(question, NO_ANSWER)
 
+    async def same_problem(self, fault: str, earlier: Sequence[OpenReport]) -> SameProblem:
+        self._call("same_problem", fault, *(report.summary for report in earlier))
+        return SameProblem(report_id=self._same.get(fault))
+
+    async def draft_ticket(self, team: Team, brief: TicketBrief) -> TicketArgs:
+        self._call("draft_ticket", brief.fault)
+        self.briefs.append(brief)
+        queued = self._drafts.get(brief.fault)
+        if queued:
+            return queued.pop(0)
+        return TicketArgs(tool="create_ticket", cabin=brief.cabin, summary=brief.fault)
+
     def _call(self, name: str, *inputs: str) -> None:
         self.calls.append(name)
         self.inputs.extend(inputs)
-        if self._down:
+        if self._down or name in self.down_for:
             raise LlmError("down")
 
 
@@ -139,12 +175,31 @@ def demo_stays() -> SwitchableStays:
     return SwitchableStays(SeedStays(Settings().stays_path))
 
 
+class FakeTickets:
+    def __init__(self) -> None:
+        self.created: dict[TicketKey, TicketRequest] = {}
+        self.calls = 0
+        self.down = False
+
+    async def create(self, request: TicketRequest) -> TicketReceipt:
+        self.calls += 1
+        if self.down:
+            raise TicketError("down")
+        self.created.setdefault(request.key, request)
+        ref = f"T{list(self.created).index(request.key) + 1}"
+        return TicketReceipt(ref, TicketStatus.OPEN, 1)
+
+
 class InMemoryTriageStore:
     def __init__(self) -> None:
         self.cases: dict[int, CaseSnapshot] = {}
         self.tasks: list[TaskDraft] = []
         self.answers: list[TaskAnswer] = []
         self.audit: list[AuditEntry] = []
+        self.tickets: dict[str, TicketLink] = {}
+        self.same: dict[str, int] = {}
+        self.validations: list[ValidationRecord] = []
+        self.reports: list[tuple[ReportDraft, SavedReport]] = []
 
     def add_case(self, case_id: int, scope: Scope | None = None) -> None:
         self.cases[case_id] = CaseSnapshot(CaseStatus(), scope, 0)
@@ -155,16 +210,75 @@ class InMemoryTriageStore:
     async def commit(self, case_id: int, step: StepRecord) -> None:
         if step.status is not None:
             self.write_status(case_id, step.status)
-        self.tasks.extend(step.tasks)
+        known = {task.step_id for task in self.tasks}
+        self.tasks.extend(task for task in step.tasks if task.step_id not in known)
         self.answers.extend(step.answers)
-        states = {transition.step_id: transition.state for transition in step.resumed}
-        self.tasks = [
-            replace(task, state=states[task.step_id])
-            if task.step_id in states and task.state is TaskState.AWAITING_SCOPE
-            else task
-            for task in self.tasks
-        ]
+        for move in step.transitions:
+            for i, task in enumerate(self.tasks):
+                if task.step_id == move.step_id and task.state is move.expected:
+                    self.tasks[i] = replace(task, state=move.state)
+                    if move.ticket is not None:
+                        self.tickets[task.step_id] = move.ticket
+                    if move.same_report_id is not None:
+                        self.same[task.step_id] = move.same_report_id
+        if step.validation is not None:
+            self.validations.append(step.validation)
         self.audit.append(step.audit)
+
+    @asynccontextmanager
+    async def lock_case(self, case_id: int) -> AsyncIterator["InMemoryLockedCase"]:
+        yield InMemoryLockedCase(self, case_id)
+
+    async def task_states(self, case_id: int) -> list[TaskState]:
+        return [task.state for task in self.tasks]
+
+    async def faults(self, case_id: int) -> list[FaultTask]:
+        return [
+            FaultTask(
+                task.step_id,
+                task.state,
+                task.category or Category.OTHER,
+                task.fault_type or FaultType.OTHER,
+                task.urgency,
+                task.summary,
+                self.same.get(task.step_id),
+            )
+            for task in self.tasks
+            if task.kind is TaskKind.FAULT
+        ]
+
+    async def save_report(self, case_id: int, draft: ReportDraft) -> SavedReport:
+        for saved_draft, saved in self.reports:
+            if saved_draft.step_id == draft.step_id:
+                return saved
+        earlier = tuple(
+            OpenReport(saved.id, saved_draft.fault_type, saved_draft.summary, saved_draft.at)
+            for saved_draft, saved in self.reports
+            if saved_draft.cabin == draft.cabin and self._open(saved_draft.step_id)
+        )
+        saved = SavedReport(len(self.reports) + 1, earlier)
+        self.reports.append((draft, saved))
+        return saved
+
+    async def link_target(self, report_id: int) -> LinkTarget | None:
+        for draft, saved in self.reports:
+            if saved.id == report_id:
+                ticket = self.tickets.get(draft.step_id)
+                if ticket is None:
+                    return LinkTarget(None, None, None, None)
+                return LinkTarget(ticket.ref, ticket.status, ticket.version, ticket.cabin)
+        return None
+
+    def add_report(self, draft: ReportDraft, ticket: TicketLink | None) -> int:
+        report_id = len(self.reports) + 1
+        self.reports.append((draft, SavedReport(report_id, ())))
+        if ticket is not None:
+            self.tickets[draft.step_id] = ticket
+        return report_id
+
+    def _open(self, step_id: str) -> bool:
+        ticket = self.tickets.get(step_id)
+        return ticket is None or ticket.status not in CLOSED_TICKET_STATES
 
     async def awaiting_scope(self, case_id: int) -> list[WaitingTask]:
         return [
@@ -181,3 +295,13 @@ class InMemoryTriageStore:
 
     def status(self, case_id: int) -> CaseStatus:
         return self.cases[case_id].status
+
+
+class InMemoryLockedCase:
+    def __init__(self, store: InMemoryTriageStore, case_id: int) -> None:
+        self._store = store
+        self._case_id = case_id
+        self.case = store.cases[case_id]
+
+    async def commit(self, step: StepRecord) -> None:
+        await self._store.commit(self._case_id, step)

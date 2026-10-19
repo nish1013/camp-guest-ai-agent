@@ -21,6 +21,11 @@ class CaseRepository:
         row = (await self._conn.execute(select(cases).where(cases.c.id == case_id))).one()
         return self._record(row)
 
+    # Every status write is an UPDATE of this row, so it waits until the holder's commit.
+    async def lock(self, case_id: int) -> CaseRecord:
+        query = select(cases).where(cases.c.id == case_id).with_for_update(key_share=True)
+        return self._record((await self._conn.execute(query)).one())
+
     async def find_open_by_token(self, case_token: str) -> CaseRecord | None:
         query = select(cases).where(
             cases.c.case_token == case_token, cases.c.state.in_(LIVE_STATES)

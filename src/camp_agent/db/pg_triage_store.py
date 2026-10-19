@@ -1,10 +1,21 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from camp_agent.db.audit_repository import AuditRepository
 from camp_agent.db.case_repository import CaseRepository
+from camp_agent.db.pg_locked_case import PgLockedCase, write_step
+from camp_agent.db.report_repository import ReportRepository
 from camp_agent.db.task_repository import TaskRepository
-from camp_agent.graph.stale_case_error import StaleCaseError
-from camp_agent.graph.triage_types import CaseSnapshot, StepRecord, WaitingTask
+from camp_agent.domain.cabin_reports import ReportDraft, SavedReport
+from camp_agent.domain.fault_flow import FaultTask
+from camp_agent.domain.route_guard import TaskState
+from camp_agent.graph.triage_types import (
+    CaseSnapshot,
+    LinkTarget,
+    StepRecord,
+    WaitingTask,
+)
 
 
 class PgTriageStore:
@@ -20,15 +31,28 @@ class PgTriageStore:
         async with self._engine.connect() as conn:
             return await TaskRepository(conn).awaiting_scope(case_id)
 
+    async def faults(self, case_id: int) -> list[FaultTask]:
+        async with self._engine.connect() as conn:
+            return await TaskRepository(conn).faults(case_id)
+
+    async def task_states(self, case_id: int) -> list[TaskState]:
+        async with self._engine.connect() as conn:
+            return await TaskRepository(conn).states(case_id)
+
+    async def save_report(self, case_id: int, draft: ReportDraft) -> SavedReport:
+        async with self._engine.begin() as conn:
+            return await ReportRepository(conn).save(case_id, draft)
+
+    async def link_target(self, report_id: int) -> LinkTarget | None:
+        async with self._engine.connect() as conn:
+            return await ReportRepository(conn).link_target(report_id)
+
+    @asynccontextmanager
+    async def lock_case(self, case_id: int) -> AsyncIterator[PgLockedCase]:
+        async with self._engine.begin() as conn:
+            case = await CaseRepository(conn).lock(case_id)
+            yield PgLockedCase(conn, case_id, CaseSnapshot(case.status, case.scope, case.version))
+
     async def commit(self, case_id: int, step: StepRecord) -> None:
         async with self._engine.begin() as conn:
-            change = step.status
-            if change is not None and not await CaseRepository(conn).save_status(
-                case_id, change.status, change.version
-            ):
-                raise StaleCaseError(case_id)
-            await AuditRepository(conn).insert(case_id, step.audit)
-            task_repository = TaskRepository(conn)
-            await task_repository.insert(case_id, step.tasks)
-            await task_repository.save_answers(case_id, step.answers)
-            await task_repository.resume(case_id, step.resumed)
+            await write_step(conn, case_id, step)

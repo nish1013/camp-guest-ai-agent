@@ -1,7 +1,9 @@
+from dataclasses import dataclass
 from enum import StrEnum
 
 from pydantic import BaseModel
 
+from camp_agent.domain.fault_type import FaultType
 from camp_agent.domain.route_guard import Category, Route
 from camp_agent.domain.urgency import Urgency
 
@@ -29,3 +31,21 @@ class Classification(BaseModel):
     category: Category
     route: Route
     urgency: Urgency
+    fault_type: FaultType | None = None
+
+
+class SameProblem(BaseModel):
+    report_id: int | None
+
+
+class TicketArgs(BaseModel):
+    tool: str
+    cabin: str
+    summary: str
+
+
+@dataclass(frozen=True)
+class TicketBrief:
+    fault: str
+    cabin: str
+    rejected_for: tuple[str, ...] = ()

@@ -1,4 +1,4 @@
-from typing import Any, TypedDict
+from typing import Any
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -6,13 +6,35 @@ from langgraph.types import RetryPolicy
 
 from camp_agent.clock import Clock
 from camp_agent.domain.audit_entry import AuditEntry, AuditValue
+from camp_agent.domain.case_activity import in_action, triages_follow_up
 from camp_agent.domain.case_state import CaseState, StateReason
+from camp_agent.domain.fault_type import FaultType
 from camp_agent.domain.route_guard import Route, TaskKind, TaskState, guard_route
 from camp_agent.domain.step_up import resumes_waiting
 from camp_agent.domain.urgency import Urgency
+from camp_agent.graph.fault_desk import FaultDesk
 from camp_agent.graph.guide_answerer import GuideAnswerer
 from camp_agent.graph.stale_case_error import StaleCaseError
 from camp_agent.graph.triage_graph import PendingMessage
+from camp_agent.graph.triage_state import (
+    ANSWER,
+    CLARIFY,
+    CLASSIFY,
+    CONFIRM_SPLIT,
+    LINK,
+    LLM_FAILED,
+    PARK,
+    REPORT,
+    ROUTE_GUARD,
+    SAFETY,
+    SAME,
+    SPECIALIST,
+    SPLIT,
+    VERIFY,
+    TriageState,
+    TriageUpdate,
+    start_state,
+)
 from camp_agent.graph.triage_store import TriageStore
 from camp_agent.graph.triage_types import (
     StatusChange,
@@ -24,37 +46,8 @@ from camp_agent.graph.triage_types import (
 )
 from camp_agent.llm.llm_error import LlmError
 from camp_agent.llm.llm_port import LlmPort
-from camp_agent.llm.llm_types import Classification, Verdict
-
-
-class TriageState(TypedDict):
-    case_id: int
-    batch_key: str
-    text: str
-    intents: list[str]
-    index: int
-    classification: Classification | None
-    failed_step: str
-    next: str
-
-
-class TriageUpdate(TypedDict, total=False):
-    intents: list[str]
-    index: int
-    classification: Classification
-    failed_step: str
-    next: str
-
-
-SAFETY = "safety"
-VERIFY = "verify"
-PARK = "park"
-CLARIFY = "clarify"
-SPLIT = "split"
-CLASSIFY = "classify"
-ROUTE_GUARD = "route_guard"
-ANSWER = "answer"
-LLM_FAILED = "llm_failed"
+from camp_agent.llm.llm_types import Verdict
+from camp_agent.ticket.ticket_port import TicketPort
 
 _AFTER_VERDICT = {Verdict.GENUINE: SPLIT, Verdict.SPAM: PARK, Verdict.UNCLEAR: CLARIFY}
 _RECURSION_LIMIT = 1000
@@ -70,28 +63,32 @@ class LangGraphTriage:
         clock: Clock,
         policy: TriagePolicy,
         answerer: GuideAnswerer,
+        tickets: TicketPort,
     ) -> None:
         self._llm = llm
         self._store = store
         self._clock = clock
         self._policy = policy
         self._answerer = answerer
+        self._faults = FaultDesk(llm, store, tickets, clock)
         self._graph = self._build()
 
     async def run(self, case_id: int, batch: list[PendingMessage]) -> None:
-        start: TriageState = {
-            "case_id": case_id,
-            "batch_key": f"m{batch[0].id}",
-            "text": "\n".join(message.text for message in batch),
-            "intents": [],
-            "index": 0,
-            "classification": None,
-            "failed_step": "",
-            "next": "",
-        }
-        await self._graph.ainvoke(start, {"recursion_limit": _RECURSION_LIMIT})
+        text = "\n".join(message.text for message in batch)
+        await self._invoke(start_state(case_id, f"m{batch[0].id}", text, SAFETY))
 
     async def resume(self, case_id: int) -> None:
+        await self._resume_waiting(case_id)
+        update = await self._faults.route(case_id)
+        if update["next"] != END:
+            await self._invoke(
+                start_state(case_id, "", "", update["next"], update.get("fault", ""))
+            )
+
+    async def _invoke(self, start: TriageState) -> None:
+        await self._graph.ainvoke(start, {"recursion_limit": _RECURSION_LIMIT})
+
+    async def _resume_waiting(self, case_id: int) -> None:
         case = await self._store.load(case_id)
         if case.scope is None or not resumes_waiting(case.status, case.scope):
             return
@@ -108,7 +105,9 @@ class LangGraphTriage:
                 case_id,
                 StepRecord(
                     AuditEntry(ROUTE_GUARD, decision.kind, detail),
-                    resumed=(TaskTransition(task.step_id, decision.state),),
+                    transitions=(
+                        TaskTransition(task.step_id, decision.state, TaskState.AWAITING_SCOPE),
+                    ),
                 ),
             )
 
@@ -134,6 +133,9 @@ class LangGraphTriage:
         if case.status.state is CaseState.PARKED:
             await self._commit(state, AuditEntry(SAFETY, "stop_parked", {"input": state["text"]}))
             return {"next": END}
+        if not triages_follow_up(case.status, await self._store.task_states(state["case_id"])):
+            await self._commit(state, AuditEntry(SAFETY, "joined", {"input": state["text"]}))
+            return {"next": END}
         await self._commit(state, AuditEntry(SAFETY, "clear", {"input": state["text"]}))
         return {"next": VERIFY}
 
@@ -151,6 +153,12 @@ class LangGraphTriage:
 
     async def _park(self, state: TriageState) -> TriageUpdate:
         case = await self._store.load(state["case_id"])
+        # A ticket may have been saved since the entry check; a parked case has none (I8).
+        if in_action(await self._store.task_states(state["case_id"])):
+            await self._commit(
+                state, AuditEntry(PARK, "refused_in_action"), case.change(case.status)
+            )
+            return {"next": END}
         status = case.status.park(StateReason.SPAM)
         await self._commit(state, AuditEntry(PARK, status.state), case.change(status))
         return {"next": END}
@@ -206,6 +214,9 @@ class LangGraphTriage:
             urgency=proposal.urgency,
             state=decision.state,
             summary=state["intents"][state["index"]],
+            fault_type=(proposal.fault_type or FaultType.OTHER)
+            if decision.kind is TaskKind.FAULT
+            else None,
         )
         status = case.status.raise_urgency(proposal.urgency)
         if decision.state is TaskState.HELD:
@@ -215,7 +226,7 @@ class LangGraphTriage:
         await self._commit(state, audit, case.change(status), (task,))
         if decision.kind is TaskKind.QUESTION:
             return {"next": ANSWER}
-        return _next_intent(state)
+        return await self._next_intent(state)
 
     async def _answer(self, state: TriageState) -> TriageUpdate:
         step_id = _step_id(state)
@@ -228,7 +239,7 @@ class LangGraphTriage:
             detail["proposed"] = checked.proposed
         answer = TaskAnswer(step_id, checked.text, checked.cited)
         await self._commit(state, AuditEntry(ANSWER, checked.outcome, detail), answers=(answer,))
-        return _next_intent(state)
+        return await self._next_intent(state)
 
     async def _llm_failed(self, state: TriageState) -> TriageUpdate:
         case = await self._store.load(state["case_id"])
@@ -247,6 +258,12 @@ class LangGraphTriage:
     ) -> None:
         await self._store.commit(state["case_id"], StepRecord(audit, status, tasks, answers))
 
+    async def _next_intent(self, state: TriageState) -> TriageUpdate:
+        index = state["index"] + 1
+        if index < len(state["intents"]):
+            return {"next": CLASSIFY, "index": index}
+        return {**await self._faults.route(state["case_id"]), "index": index}
+
     def _build(self) -> CompiledStateGraph[TriageState, Any, TriageState, TriageState]:
         builder = StateGraph(TriageState)
         nodes = {
@@ -259,11 +276,16 @@ class LangGraphTriage:
             ROUTE_GUARD: self._route_guard,
             ANSWER: self._answer,
             LLM_FAILED: self._llm_failed,
+            CONFIRM_SPLIT: self._faults.confirm_split,
+            REPORT: self._faults.report,
+            SAME: self._faults.same,
+            SPECIALIST: self._faults.specialist,
+            LINK: self._faults.link,
         }
         for name, node in nodes.items():
             builder.add_node(name, node, retry_policy=_STALE_RETRY)
             builder.add_conditional_edges(name, _next_node, [*nodes, END])
-        builder.add_edge(START, SAFETY)
+        builder.add_conditional_edges(START, _next_node, list(nodes))
         return builder.compile()
 
 
@@ -273,8 +295,3 @@ def _next_node(state: TriageState) -> str:
 
 def _step_id(state: TriageState) -> str:
     return f"{state['batch_key']}/t{state['index']}"
-
-
-def _next_intent(state: TriageState) -> TriageUpdate:
-    index = state["index"] + 1
-    return {"next": CLASSIFY if index < len(state["intents"]) else END, "index": index}

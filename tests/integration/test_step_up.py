@@ -63,7 +63,7 @@ def test_us7_qr_scope_no_form(triage_client: TestClient, db: Engine) -> None:
     report(triage_client)
 
     assert FORM not in triage_client.get("/").text
-    assert task_states(db) == [("fault", "queued")]
+    assert task_states(db) == [("fault", "ticketed")]
 
 
 def test_us7_question_needs_no_form(triage_client: TestClient) -> None:
@@ -84,8 +84,13 @@ def test_us7_match_sets_scope_and_resumes(triage_client: TestClient, db: Engine)
     assert rows(db, "SELECT scope_stay_from, scope_stay_to FROM cases") == [
         (date(2026, 10, 18), date(2026, 10, 25))
     ]
-    assert task_states(db) == [("fault", "queued")]
-    assert audit(db)[-2:] == [("step_up", "matched"), ("route_guard", "fault")]
+    assert task_states(db) == [("fault", "ticketed")]
+    assert audit(db)[-4:] == [
+        ("step_up", "matched"),
+        ("route_guard", "fault"),
+        ("same", "none"),
+        ("ticket", "created"),
+    ]
 
 
 @pytest.mark.parametrize(
@@ -209,7 +214,7 @@ def test_d3_form_fields_reach_no_llm_or_audit(
         for table in ("audit_entries", "verification_attempts", "messages", "tasks", "cases")
         for row in rows(db, f"SELECT * FROM {table}")
     )
-    assert llm.calls.count("verify") == 2
+    assert llm.calls.count("verify") == 1
     for secret in ("Müller", "muller", "Okafor", "48213", "77777"):
         assert all(secret not in sent for sent in llm.inputs), secret
         assert secret not in stored, secret

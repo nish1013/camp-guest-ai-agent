@@ -12,6 +12,8 @@ class StateReason(StrEnum):
     MONEY = "money"
     LLM_FAILED = "llm_failed"
     CLARIFY_LIMIT = "clarify_limit"
+    FAULT_REVIEW = "fault_review"
+    TICKETING_DOWN = "ticketing_down"
     SPAM = "spam"
     VERIFICATION = "verification"
 

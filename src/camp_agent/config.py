@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     llm_timeout_s: float = 20.0
     llm_attempts: int = 3
     llm_retry_delay_s: float = 1.0
+    ticket_attempts: int = 3
+    ticket_retry_delay_s: float = 1.0
 
     safety_terms: list[str] = ["fire", "gas", "smoke", "flood", "medical", "injury"]
     held_categories: list[str] = ["refund", "compensation", "cabin_move", "safety_close_out"]
