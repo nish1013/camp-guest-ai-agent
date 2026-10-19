@@ -1,6 +1,5 @@
 import logging
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
@@ -15,35 +14,26 @@ from fastapi import (
     status,
 )
 from fastapi.responses import HTMLResponse, StreamingResponse
-from fastapi.templating import Jinja2Templates
-from markupsafe import Markup
 from pydantic import StringConstraints
 
 from camp_agent.clock import Clock
 from camp_agent.config import Settings
-from camp_agent.db.answered_question import AnsweredQuestion
-from camp_agent.db.case_record import CaseRecord
-from camp_agent.domain.desk_hours import DeskHours
 from camp_agent.domain.fault_flow import Confirmation
 from camp_agent.domain.guest_status import (
     BOOKING_FOUND,
     BOOKINGS_DOWN,
     NO_BOOKING_MATCH,
-    guest_status,
 )
 from camp_agent.domain.quick_pick import QuickPick
 from camp_agent.domain.scope import Scope
 from camp_agent.guide.guide_types import GuideCopy
-from camp_agent.http.status_events import StatusEvents, event_id
-from camp_agent.intake.answer_types import AnswerCommand, BookingLine, CaseFaults
+from camp_agent.http.case_panels import CasePanels
+from camp_agent.http.page_templates import templates
+from camp_agent.http.status_events import StatusEvents
+from camp_agent.intake.answer_types import AnswerCommand
 from camp_agent.intake.find_case import FindCase
 from camp_agent.intake.intake_types import Accepted, SubmitMessageCommand
-from camp_agent.intake.list_answers import ListAnswers
-from camp_agent.intake.list_bookings import ListBookings
-from camp_agent.intake.list_declined import ListDeclined
-from camp_agent.intake.list_faults import ListFaults
 from camp_agent.intake.run_coordinator import RunCoordinator
-from camp_agent.intake.step_up_form import StepUpForm
 from camp_agent.intake.step_up_types import StepUpCommand, StepUpResult
 from camp_agent.intake.submit_answer import SubmitAnswer
 from camp_agent.intake.submit_message import SubmitMessage
@@ -68,25 +58,6 @@ Target = Literal["case", "new"]
 
 
 @dataclass(frozen=True)
-class CaseView:
-    link: str
-    status: str
-    answers: list[AnsweredQuestion]
-    faults: CaseFaults
-    bookings: list[BookingLine]
-    declined: list[str]
-    step_up: bool
-
-
-@dataclass(frozen=True)
-class CasePanel:
-    link: str
-    lines: Markup
-    actions: Markup
-    seen: str
-
-
-@dataclass(frozen=True)
 class CaseOffer:
     token: str
     label: str
@@ -96,24 +67,17 @@ class CaseOffer:
 class GuestServices:
     settings: Settings
     clock: Clock
-    desk: DeskHours
     guide_copy: GuideCopy
     qr_tokens: QrTokens
     submit: SubmitMessage
     find_case: FindCase
-    list_answers: ListAnswers
-    list_faults: ListFaults
-    list_bookings: ListBookings
-    list_declined: ListDeclined
+    panels: CasePanels
     coordinator: RunCoordinator
     step_up: SubmitStepUp
-    step_up_form: StepUpForm
     answer: SubmitAnswer
 
 
 log = logging.getLogger(__name__)
-templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
-templates.env.globals["picks"] = list(QuickPick)
 router = APIRouter()
 
 
@@ -168,7 +132,7 @@ async def case_events(
 
     async def render() -> dict[str, str] | None:
         case = await services.find_case(case_token)
-        return None if case is None else _parts(await _view(case, services))
+        return None if case is None else await services.panels.parts(case)
 
     events = StatusEvents(
         render, services.settings.status_poll_s, services.settings.status_stream_s
@@ -222,7 +186,7 @@ async def submit_message(
         request,
         "_case.html",
         {
-            "case": await _panel(result.case, services),
+            "case": await services.panels.panel(result.case),
             "scope": _scope(request, services),
             "offer": await _offer(result.case.case_token, services),
             "next_key": uuid4(),
@@ -259,7 +223,7 @@ async def step_up(
         request,
         "_case_status.html",
         {
-            "case": await _panel(reply.case, services),
+            "case": await services.panels.panel(reply.case),
             "reply": _step_up_reply(reply.result, services),
         },
     )
@@ -283,7 +247,7 @@ async def answer(
     if reply.moved:
         background.add_task(services.coordinator.drive, reply.case.id)
     return templates.TemplateResponse(
-        request, "_case_status.html", {"case": await _panel(reply.case, services)}
+        request, "_case_status.html", {"case": await services.panels.panel(reply.case)}
     )
 
 
@@ -301,7 +265,7 @@ async def _page(
         "index.html",
         {
             "scope": _scope(request, services),
-            "case": None if case is None else await _panel(case, services),
+            "case": None if case is None else await services.panels.panel(case),
             "offer": offer,
             "next_key": uuid4(),
         },
@@ -341,37 +305,6 @@ def _keep_case(response: HTMLResponse, case_token: str, services: GuestServices)
         httponly=True,
         samesite="lax",
         secure=services.settings.cookie_secure,
-    )
-
-
-async def _panel(case: CaseRecord, services: GuestServices) -> CasePanel:
-    view = await _view(case, services)
-    parts = _parts(view)
-    return CasePanel(view.link, Markup(parts["status"]), Markup(parts["actions"]), event_id(parts))
-
-
-def _parts(view: CaseView) -> dict[str, str]:
-    return {
-        "status": templates.get_template("_case_lines.html").render(case=view),
-        "actions": templates.get_template("_case_actions.html").render(case=view),
-    }
-
-
-async def _view(case: CaseRecord, services: GuestServices) -> CaseView:
-    now = services.clock.now()
-    return CaseView(
-        link=f"/c/{case.case_token}",
-        status=guest_status(
-            case.status,
-            services.guide_copy.emergency,
-            services.guide_copy.reception,
-            None if services.desk.is_open(now) else services.desk.opens,
-        ),
-        answers=await services.list_answers(case.id),
-        faults=await services.list_faults(case.id),
-        bookings=await services.list_bookings(case.id),
-        declined=await services.list_declined(case.id),
-        step_up=await services.step_up_form.shown(case),
     )
 
 

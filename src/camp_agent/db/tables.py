@@ -155,3 +155,10 @@ ticket_events = Table(
     Column("version", Integer, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
+
+status_notices = Table(
+    "status_notices",
+    metadata,
+    Column("case_id", BigInteger, ForeignKey("cases.id"), primary_key=True),
+    Column("digest", Text, nullable=False),
+)

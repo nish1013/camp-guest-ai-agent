@@ -6,6 +6,7 @@ from camp_agent.domain.audit_entry import AuditEntry
 from camp_agent.domain.case_closure import settled
 from camp_agent.domain.route_guard import TaskState
 from camp_agent.graph.triage_types import TaskTransition
+from camp_agent.notification.case_watch import CaseWatch
 from camp_agent.staff.staff_case_lock import StaffCaseLock
 from camp_agent.staff.staff_conflict_error import StaffConflictError
 from camp_agent.staff.staff_types import BookingDecision
@@ -14,9 +15,9 @@ BOOKING_STATUS = "booking_status"
 
 
 class SetBookingStatus:
-    def __init__(self, engine: AsyncEngine, clock: Clock) -> None:
+    def __init__(self, engine: AsyncEngine, clock: Clock, watch: CaseWatch | None = None) -> None:
         self._engine = engine
-        self._lock = StaffCaseLock(engine, clock)
+        self._lock = StaffCaseLock(engine, clock, watch)
         self._clock = clock
 
     # Only staff turn a request into a booking (D12). Returns the case id, or None.

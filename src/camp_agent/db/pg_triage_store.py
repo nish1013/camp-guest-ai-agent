@@ -22,13 +22,15 @@ from camp_agent.graph.triage_types import (
     StepRecord,
     WaitingTask,
 )
+from camp_agent.notification.case_watch import CaseWatch
 
 CLOSED = AuditEntry("case", "closed")
 
 
 class PgTriageStore:
-    def __init__(self, engine: AsyncEngine) -> None:
+    def __init__(self, engine: AsyncEngine, watch: CaseWatch | None = None) -> None:
         self._engine = engine
+        self._watch = watch
 
     async def load(self, case_id: int) -> CaseSnapshot:
         async with self._engine.connect() as conn:
@@ -64,18 +66,29 @@ class PgTriageStore:
         async with self._engine.begin() as conn:
             case = await CaseRepository(conn).lock(case_id)
             yield PgLockedCase(conn, case_id, CaseSnapshot(case.status, case.scope, case.version))
+        await self._changed(case_id)
 
     async def close_if_done(self, case_id: int, now: datetime) -> None:
+        if await self._close_if_done(case_id, now):
+            await self._changed(case_id)
+
+    async def commit(self, case_id: int, step: StepRecord) -> None:
+        async with self._engine.begin() as conn:
+            await write_step(conn, case_id, step)
+        await self._changed(case_id)
+
+    async def _close_if_done(self, case_id: int, now: datetime) -> bool:
         async with self._engine.begin() as conn:
             cases = CaseRepository(conn)
             case = await cases.lock(case_id)
             status = settled(case.status, await TaskRepository(conn).progress(case_id), now)
             if status.state is not CaseState.CLOSED or case.status.state is CaseState.CLOSED:
-                return
+                return False
             if not await cases.save_status(case_id, status, case.version):
                 raise RuntimeError("a locked case changed")
             await AuditRepository(conn).insert(case_id, CLOSED)
+        return True
 
-    async def commit(self, case_id: int, step: StepRecord) -> None:
-        async with self._engine.begin() as conn:
-            await write_step(conn, case_id, step)
+    async def _changed(self, case_id: int) -> None:
+        if self._watch is not None:
+            await self._watch.changed(case_id)

@@ -46,6 +46,7 @@ from camp_agent.llm.llm_types import (
     TicketBrief,
     Verdict,
 )
+from camp_agent.notification.notification_types import StatusNotice
 from camp_agent.stay.seed_stays import SeedStays
 from camp_agent.stay.stay_error import StayError
 from camp_agent.stay.stay_port import StayContextPort
@@ -355,3 +356,17 @@ class InMemoryLockedCase:
 
     async def commit(self, step: StepRecord) -> None:
         await self._store.commit(self._case_id, step)
+
+
+class RecordingNotifications:
+    def __init__(self) -> None:
+        self.notices: list[StatusNotice] = []
+        self.down = False
+
+    async def notify(self, notice: StatusNotice) -> None:
+        if self.down:
+            raise ConnectionError("down")
+        self.notices.append(notice)
+
+    def statuses(self) -> list[str]:
+        return [notice.status for notice in self.notices]

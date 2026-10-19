@@ -8,6 +8,7 @@ from camp_agent.domain.case_closure import settled
 from camp_agent.domain.case_state import CaseState
 from camp_agent.domain.route_guard import TaskState
 from camp_agent.domain.staff_resolution import approved_state, edit_errors
+from camp_agent.notification.case_watch import CaseWatch
 from camp_agent.staff.resolve_error import ResolveError
 from camp_agent.staff.staff_case_lock import StaffCase, StaffCaseLock
 from camp_agent.staff.staff_conflict_error import StaffConflictError
@@ -17,8 +18,8 @@ RESOLVE = "resolve"
 
 
 class ResolveAsHuman:
-    def __init__(self, engine: AsyncEngine, clock: Clock) -> None:
-        self._lock = StaffCaseLock(engine, clock)
+    def __init__(self, engine: AsyncEngine, clock: Clock, watch: CaseWatch | None = None) -> None:
+        self._lock = StaffCaseLock(engine, clock, watch)
         self._clock = clock
 
     # Returns False when no such case exists.
