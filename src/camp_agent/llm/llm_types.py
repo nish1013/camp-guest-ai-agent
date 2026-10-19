@@ -20,6 +20,11 @@ class SplitOutput(BaseModel):
     intents: list[str]
 
 
+class GuideAnswer(BaseModel):
+    text: str
+    section_id: str | None
+
+
 class Classification(BaseModel):
     category: Category
     route: Route

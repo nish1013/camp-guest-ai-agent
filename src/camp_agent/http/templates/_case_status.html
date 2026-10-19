@@ -1,2 +1,9 @@
 <p>Status: <strong data-status>{{ case.status }}</strong></p>
+{% for answer in case.answers %}
+<article data-answer>
+  <p><em>{{ answer.question }}</em></p>
+  <p>{{ answer.answer }}</p>
+  {% if answer.section_id %}<p><small>From the camp guide: <span data-cited>{{ answer.section_id }}</span></small></p>{% endif %}
+</article>
+{% endfor %}
 <p><a href="{{ case.link }}" data-case-link>Your case link</a></p>

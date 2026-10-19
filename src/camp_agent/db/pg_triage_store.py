@@ -20,4 +20,6 @@ class PgTriageStore:
             await AuditRepository(conn).insert(case_id, step.audit)
             if step.status is not None:
                 await CaseRepository(conn).save_status(case_id, step.status)
-            await TaskRepository(conn).insert(case_id, step.tasks)
+            task_repository = TaskRepository(conn)
+            await task_repository.insert(case_id, step.tasks)
+            await task_repository.save_answers(case_id, step.answers)

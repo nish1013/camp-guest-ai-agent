@@ -1,3 +1,7 @@
+from collections.abc import Sequence
+
+from camp_agent.guide.guide_types import GuideSection
+
 _CONTEXT = (
     "You help triage messages sent by guests of a holiday camp to its 24x7 assistant."
     " Personal details in the message are masked as [ref], [email] and [phone]."
@@ -27,3 +31,16 @@ CLASSIFY = (
     " urgency: urgent for no hot water, no heating in cold weather, leaks or anything unsafe;"
     " can_wait for routine requests such as towels; otherwise normal."
 )
+
+ANSWER = (
+    f"{_CONTEXT} Answer the guest's question using only the camp guide sections given."
+    " Each section starts with its id in square brackets. Set section_id to the id of the one"
+    " section the answer comes from, and keep the answer short and in plain English."
+    " If no section answers the question, set section_id to null and text to an empty string."
+    " Never add a fact that is not in the section."
+)
+
+
+def answer_input(question: str, sections: Sequence[GuideSection]) -> str:
+    guide = "\n\n".join(f"[{s.id}] {s.title}\n{s.body}" for s in sections)
+    return f"Camp guide sections:\n\n{guide}\n\nGuest question: {question}"

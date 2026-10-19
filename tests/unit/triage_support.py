@@ -5,11 +5,12 @@ from camp_agent.domain.route_guard import Category, Route
 from camp_agent.domain.safety_rule import SafetyRule
 from camp_agent.domain.scope import Scope, ScopeSource
 from camp_agent.domain.urgency import Urgency
+from camp_agent.graph.guide_answerer import GuideAnswerer
 from camp_agent.graph.langgraph_triage import LangGraphTriage
 from camp_agent.graph.triage_graph import PendingMessage
 from camp_agent.graph.triage_types import TriagePolicy
 from camp_agent.llm.llm_types import Classification
-from tests.fakes import FakeLlm, InMemoryTriageStore, oct_19
+from tests.fakes import FakeLlm, InMemoryTriageStore, SwitchableGuide, demo_guide, oct_19
 
 DEFAULTS = Settings()
 C12 = Scope("C12", date(2026, 10, 18), date(2026, 10, 25), ScopeSource.QR)
@@ -19,6 +20,7 @@ POLICY = TriagePolicy(
     DEFAULTS.clarify_max_rounds,
 )
 CASE = 1
+RECEPTION = "Call reception on 01632 960123."
 
 
 def proposal(category: Category, route: Route, urgency: Urgency) -> Classification:
@@ -32,10 +34,14 @@ def new_store(scope: Scope | None = C12) -> InMemoryTriageStore:
 
 
 async def triage(
-    llm: FakeLlm, *texts: str, store: InMemoryTriageStore | None = None
+    llm: FakeLlm,
+    *texts: str,
+    store: InMemoryTriageStore | None = None,
+    guide: SwitchableGuide | None = None,
 ) -> InMemoryTriageStore:
     store = store or new_store()
-    graph = LangGraphTriage(llm, store, oct_19(), POLICY)
+    answerer = GuideAnswerer(llm, guide or demo_guide(), RECEPTION)
+    graph = LangGraphTriage(llm, store, oct_19(), POLICY, answerer)
     for i, text in enumerate(texts, start=1):
         await graph.run(CASE, [PendingMessage(i, text)])
     return store

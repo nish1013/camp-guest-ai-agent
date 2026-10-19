@@ -15,6 +15,7 @@ from camp_agent.db.engine import make_engine
 from camp_agent.db.pg_triage_store import PgTriageStore
 from camp_agent.db.probe import DatabaseProbe
 from camp_agent.domain.safety_rule import SafetyRule
+from camp_agent.graph.guide_answerer import GuideAnswerer
 from camp_agent.graph.langgraph_triage import LangGraphTriage
 from camp_agent.graph.triage_graph import TriageGraph
 from camp_agent.graph.triage_types import TriagePolicy
@@ -24,6 +25,7 @@ from camp_agent.guide.markdown_guide import MarkdownGuide
 from camp_agent.http import guest, health
 from camp_agent.http.guest import GuestServices
 from camp_agent.intake.find_open_case import FindOpenCase
+from camp_agent.intake.list_answers import ListAnswers
 from camp_agent.intake.rate_limiter import SlidingWindowLimiter
 from camp_agent.intake.run_coordinator import RunCoordinator
 from camp_agent.intake.submit_message import SubmitMessage
@@ -52,13 +54,15 @@ def create_app(
         limiter = SlidingWindowLimiter(
             resolved.rate_limit_messages, timedelta(seconds=resolved.rate_limit_window_s)
         )
+        retrying_llm = RetryingLlm(
+            llm or _openai_llm(resolved), resolved.llm_attempts, resolved.llm_retry_delay_s
+        )
         triage = graph or LangGraphTriage(
-            RetryingLlm(
-                llm or _openai_llm(resolved), resolved.llm_attempts, resolved.llm_retry_delay_s
-            ),
+            retrying_llm,
             PgTriageStore(engine),
             resolved_clock,
             TriagePolicy(safety, frozenset(resolved.held_categories), resolved.clarify_max_rounds),
+            GuideAnswerer(retrying_llm, guide_port, guide_copy.reception),
         )
         app.state.health_probe = DatabaseProbe(engine)
         app.state.guest_services = GuestServices(
@@ -68,6 +72,7 @@ def create_app(
             qr_tokens=QrTokens(resolved.secret_key),
             submit=SubmitMessage(engine, limiter, resolved_clock, safety),
             find_open_case=FindOpenCase(engine),
+            list_answers=ListAnswers(engine),
             coordinator=RunCoordinator(
                 engine, triage, resolved_clock, timedelta(seconds=resolved.run_lease_s)
             ),

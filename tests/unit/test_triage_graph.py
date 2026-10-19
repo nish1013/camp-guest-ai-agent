@@ -220,8 +220,19 @@ async def test_us2_llm_down_held() -> None:
                 "route_guard:money",
             ],
         ),
+        (
+            ["pool?"],
+            [
+                "safety:clear",
+                "verify:genuine",
+                "split:1",
+                "classify:question",
+                "route_guard:question",
+                "answer:no_section",
+            ],
+        ),
     ],
-    ids=["safety", "verify-park", "parked", "clarify", "split-classify-guard"],
+    ids=["safety", "verify-park", "parked", "clarify", "split-classify-guard", "answer"],
 )
 async def test_i13_every_node_audits(texts: list[str], expected: list[str]) -> None:
     llm = FakeLlm(
