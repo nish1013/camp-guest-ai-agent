@@ -14,6 +14,7 @@ from camp_agent.domain.case_closure import TaskProgress
 from camp_agent.domain.case_status import CaseStatus
 from camp_agent.domain.run_lease import run_active
 from camp_agent.domain.scope import Scope
+from camp_agent.notification.case_watch import CaseWatch
 from camp_agent.staff.staff_conflict_error import StaffConflictError
 
 
@@ -38,9 +39,10 @@ class StaffCase:
 
 
 class StaffCaseLock:
-    def __init__(self, engine: AsyncEngine, clock: Clock) -> None:
+    def __init__(self, engine: AsyncEngine, clock: Clock, watch: CaseWatch | None) -> None:
         self._engine = engine
         self._clock = clock
+        self._watch = watch
 
     # The row lock orders this write against the run's lease claim and every status write.
     # A form older than the case, or a run holding the lease, is a conflict (I8, I10, I11).
@@ -54,3 +56,5 @@ class StaffCaseLock:
             if case.version != version or run_active(case.run_lease_until, self._clock.now()):
                 raise StaffConflictError(case_id)
             yield StaffCase(conn, case)
+        if self._watch is not None:
+            await self._watch.changed(case_id)

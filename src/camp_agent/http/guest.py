@@ -1,36 +1,39 @@
 import logging
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Form,
+    Header,
+    HTTPException,
+    Request,
+    status,
+)
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import StringConstraints
 
 from camp_agent.clock import Clock
 from camp_agent.config import Settings
-from camp_agent.db.answered_question import AnsweredQuestion
-from camp_agent.db.case_record import CaseRecord
 from camp_agent.domain.fault_flow import Confirmation
 from camp_agent.domain.guest_status import (
     BOOKING_FOUND,
     BOOKINGS_DOWN,
     NO_BOOKING_MATCH,
-    guest_status,
 )
+from camp_agent.domain.quick_pick import QuickPick
 from camp_agent.domain.scope import Scope
 from camp_agent.guide.guide_types import GuideCopy
-from camp_agent.intake.answer_types import AnswerCommand, BookingLine, CaseFaults
+from camp_agent.http.case_panels import CasePanels
+from camp_agent.http.page_templates import templates
+from camp_agent.http.status_events import StatusEvents
+from camp_agent.intake.answer_types import AnswerCommand
 from camp_agent.intake.find_case import FindCase
 from camp_agent.intake.intake_types import Accepted, SubmitMessageCommand
-from camp_agent.intake.list_answers import ListAnswers
-from camp_agent.intake.list_bookings import ListBookings
-from camp_agent.intake.list_declined import ListDeclined
-from camp_agent.intake.list_faults import ListFaults
 from camp_agent.intake.run_coordinator import RunCoordinator
-from camp_agent.intake.step_up_form import StepUpForm
 from camp_agent.intake.step_up_types import StepUpCommand, StepUpResult
 from camp_agent.intake.submit_answer import SubmitAnswer
 from camp_agent.intake.submit_message import SubmitMessage
@@ -50,17 +53,14 @@ CabinHint = Annotated[str, StringConstraints(strip_whitespace=True, max_length=1
 Surname = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 BookingRef = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]
 Subject = Annotated[str, StringConstraints(pattern=r"^m\d+(/t\d+)?$", max_length=40)]
+CaseToken = Annotated[str, StringConstraints(min_length=1, max_length=64)]
+Target = Literal["case", "new"]
 
 
 @dataclass(frozen=True)
-class CaseView:
-    link: str
-    status: str
-    answers: list[AnsweredQuestion]
-    faults: CaseFaults
-    bookings: list[BookingLine]
-    declined: list[str]
-    step_up: bool
+class CaseOffer:
+    token: str
+    label: str
 
 
 @dataclass(frozen=True)
@@ -71,18 +71,13 @@ class GuestServices:
     qr_tokens: QrTokens
     submit: SubmitMessage
     find_case: FindCase
-    list_answers: ListAnswers
-    list_faults: ListFaults
-    list_bookings: ListBookings
-    list_declined: ListDeclined
+    panels: CasePanels
     coordinator: RunCoordinator
     step_up: SubmitStepUp
-    step_up_form: StepUpForm
     answer: SubmitAnswer
 
 
 log = logging.getLogger(__name__)
-templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 router = APIRouter()
 
 
@@ -115,6 +110,41 @@ async def open_from_qr(request: Request, qr_token: str, services: Services) -> H
     return await _page(request, services)
 
 
+@router.get("/c/{case_token}", response_class=HTMLResponse)
+async def case_page(request: Request, case_token: str, services: Services) -> HTMLResponse:
+    case = await services.find_case(case_token)
+    if case is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    response = await _page(request, services, case_token)
+    _keep_case(response, case_token, services)
+    return response
+
+
+@router.get("/c/{case_token}/events")
+async def case_events(
+    case_token: str,
+    services: Services,
+    seen: str | None = None,
+    last_event_id: Annotated[str | None, Header()] = None,
+) -> StreamingResponse:
+    if await services.find_case(case_token) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+
+    async def render() -> dict[str, str] | None:
+        case = await services.find_case(case_token)
+        return None if case is None else await services.panels.parts(case)
+
+    events = StatusEvents(
+        render, services.settings.status_poll_s, services.settings.status_stream_s
+    )
+    # A reconnect sends the id of the last event it got; the page link names its first render.
+    return StreamingResponse(
+        events.stream(last_event_id or seen),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @router.post("/messages", response_class=HTMLResponse)
 async def submit_message(
     request: Request,
@@ -123,17 +153,23 @@ async def submit_message(
     text: Annotated[MessageText, Form()],
     idempotency_key: Annotated[UUID, Form()],
     cabin_hint: Annotated[CabinHint, Form()] = "",
+    pick: Annotated[QuickPick | None, Form()] = None,
+    target: Annotated[Target | None, Form()] = None,
+    offered: Annotated[CaseToken | None, Form()] = None,
 ) -> HTMLResponse:
+    if target == "case" and offered is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT)
     if cabin_hint:
         request.session[CABIN_HINT_KEY] = cabin_hint
     result = await services.submit(
         SubmitMessageCommand(
             text=text,
             idempotency_key=idempotency_key,
-            case_token=request.cookies.get(CASE_COOKIE),
+            case_token=_case_to_join(request, target, offered),
             scope=_scope(request, services),
             client_ip=_client_ip(request),
             qr_invalid=bool(request.session.get(QR_INVALID_KEY)),
+            pick=pick,
         )
     )
     if not isinstance(result, Accepted):
@@ -150,19 +186,13 @@ async def submit_message(
         request,
         "_case.html",
         {
-            "case": await _view(result.case, services),
+            "case": await services.panels.panel(result.case),
             "scope": _scope(request, services),
+            "offer": await _offer(result.case.case_token, services),
             "next_key": uuid4(),
         },
     )
-    response.set_cookie(
-        CASE_COOKIE,
-        result.case.case_token,
-        max_age=services.settings.case_cookie_max_age_s,
-        httponly=True,
-        samesite="lax",
-        secure=services.settings.cookie_secure,
-    )
+    _keep_case(response, result.case.case_token, services)
     return response
 
 
@@ -193,7 +223,7 @@ async def step_up(
         request,
         "_case_status.html",
         {
-            "case": await _view(reply.case, services),
+            "case": await services.panels.panel(reply.case),
             "reply": _step_up_reply(reply.result, services),
         },
     )
@@ -217,24 +247,47 @@ async def answer(
     if reply.moved:
         background.add_task(services.coordinator.drive, reply.case.id)
     return templates.TemplateResponse(
-        request, "_case_status.html", {"case": await _view(reply.case, services)}
+        request, "_case_status.html", {"case": await services.panels.panel(reply.case)}
     )
 
 
-async def _page(request: Request, services: GuestServices) -> HTMLResponse:
+async def _page(
+    request: Request, services: GuestServices, case_token: str | None = None
+) -> HTMLResponse:
     case = None
-    token = request.cookies.get(CASE_COOKIE)
+    offer = None
+    token = case_token or request.cookies.get(CASE_COOKIE)
     if token is not None:
         case = await services.find_case(token)
+        offer = await _offer(token, services)
     return templates.TemplateResponse(
         request,
         "index.html",
         {
             "scope": _scope(request, services),
-            "case": None if case is None else await _view(case, services),
+            "case": None if case is None else await services.panels.panel(case),
+            "offer": offer,
             "next_key": uuid4(),
         },
     )
+
+
+def _case_to_join(request: Request, target: Target | None, offered: str | None) -> str | None:
+    # The form names the case it offered, so a second tab that opened a new case since does
+    # not redirect the message. With no choice made, the cookie case is joined (D20).
+    if target == "new":
+        return None
+    if target == "case":
+        return offered
+    return request.cookies.get(CASE_COOKIE)
+
+
+async def _offer(case_token: str, services: GuestServices) -> CaseOffer | None:
+    case = await services.find_case.open(case_token)
+    if case is None:
+        return None
+    label = "your request" if case.scope is None else case.scope.cabin
+    return CaseOffer(case.case_token, label)
 
 
 def _scope(request: Request, services: GuestServices) -> Scope | None:
@@ -244,17 +297,14 @@ def _scope(request: Request, services: GuestServices) -> Scope | None:
     return services.qr_tokens.read(token, services.clock.today()).scope
 
 
-async def _view(case: CaseRecord, services: GuestServices) -> CaseView:
-    return CaseView(
-        link=f"/c/{case.case_token}",
-        status=guest_status(
-            case.status, services.guide_copy.emergency, services.guide_copy.reception
-        ),
-        answers=await services.list_answers(case.id),
-        faults=await services.list_faults(case.id),
-        bookings=await services.list_bookings(case.id),
-        declined=await services.list_declined(case.id),
-        step_up=await services.step_up_form.shown(case),
+def _keep_case(response: HTMLResponse, case_token: str, services: GuestServices) -> None:
+    response.set_cookie(
+        CASE_COOKIE,
+        case_token,
+        max_age=services.settings.case_cookie_max_age_s,
+        httponly=True,
+        samesite="lax",
+        secure=services.settings.cookie_secure,
     )
 
 

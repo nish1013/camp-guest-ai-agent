@@ -6,6 +6,7 @@ from pydantic_ai.models import Model
 from pydantic_ai.settings import ModelSettings
 
 from camp_agent.domain.cabin_reports import OpenReport
+from camp_agent.domain.quick_pick import QuickPick
 from camp_agent.domain.specialist import Team
 from camp_agent.guide.guide_types import GuideSection
 from camp_agent.llm import llm_prompts
@@ -44,8 +45,8 @@ class PydanticAiLlm:
     async def split(self, text: str) -> list[str]:
         return (await self._run(self._split, text)).intents
 
-    async def classify(self, intent: str) -> Classification:
-        return await self._run(self._classify, intent)
+    async def classify(self, intent: str, hint: QuickPick | None = None) -> Classification:
+        return await self._run(self._classify, llm_prompts.classify_input(intent, hint))
 
     async def answer(self, question: str, sections: Sequence[GuideSection]) -> GuideAnswer:
         return await self._run(self._answer, llm_prompts.answer_input(question, sections))

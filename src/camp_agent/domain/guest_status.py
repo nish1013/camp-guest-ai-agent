@@ -18,6 +18,7 @@ NOT_VERIFIED = "We could not confirm your booking."
 WAITING_FOR_RESTAURANT = "Waiting for the restaurant to confirm"
 RESTAURANT_DECLINED = "The restaurant could not take this booking."
 CLOSED = "Closed"
+RECEPTION_OPENS = "Reception opens at {:%H:%M}."
 LOGGED = {
     Team.MAINTENANCE: "Logged with maintenance",
     Team.HOUSEKEEPING: "Logged with housekeeping",
@@ -39,10 +40,18 @@ _HELD: dict[StateReason | None, str] = {
 }
 
 
-def guest_status(status: CaseStatus, emergency_guidance: str, reception: str) -> str:
+def guest_status(
+    status: CaseStatus,
+    emergency_guidance: str,
+    reception: str,
+    reception_opens: time | None = None,
+) -> str:
+    # reception_opens is set while the desk is closed: a held case waits for it (D30).
     if status.state is CaseState.HELD:
         if status.reason is StateReason.EMERGENCY:
             return emergency_guidance
+        if reception_opens is not None:
+            return RECEPTION_OPENS.format(reception_opens)
         return _HELD.get(status.reason, WAITING_ON_RECEPTION)
     if status.state is CaseState.PARKED and status.reason is StateReason.VERIFICATION:
         return f"{NOT_VERIFIED} {reception}"

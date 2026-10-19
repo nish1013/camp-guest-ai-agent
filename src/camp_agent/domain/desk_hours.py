@@ -13,6 +13,10 @@ class DeskHours:
         if self.opens >= self.closes:
             raise ValueError("the desk must open before it closes")
 
+    def is_open(self, at: datetime) -> bool:
+        local = at.astimezone(self.tz).time()
+        return self.opens <= local < self.closes
+
     def staffed_between(self, start: datetime, end: datetime) -> timedelta:
         staffed = timedelta()
         day = start.astimezone(self.tz).date()

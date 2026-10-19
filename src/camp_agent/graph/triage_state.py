@@ -1,6 +1,7 @@
 from typing import TypedDict
 
 from camp_agent.domain.cabin_reports import SavedReport
+from camp_agent.domain.quick_pick import QuickPick
 from camp_agent.llm.llm_types import Classification
 
 SAFETY = "safety"
@@ -36,6 +37,7 @@ class TriageState(TypedDict):
     rejected_for: list[str]
     report: SavedReport | None
     restored: bool
+    pick: QuickPick | None
     parked: bool
 
 
@@ -54,7 +56,12 @@ class TriageUpdate(TypedDict, total=False):
 
 
 def start_state(
-    case_id: int, batch_key: str, text: str, entry: str, restored: bool = False
+    case_id: int,
+    batch_key: str,
+    text: str,
+    entry: str,
+    restored: bool = False,
+    pick: QuickPick | None = None,
 ) -> TriageState:
     return {
         "case_id": case_id,
@@ -71,5 +78,6 @@ def start_state(
         "rejected_for": [],
         "report": None,
         "restored": restored,
+        "pick": pick,
         "parked": False,
     }

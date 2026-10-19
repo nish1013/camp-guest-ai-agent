@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from camp_agent.domain.cabin_reports import OpenReport
+from camp_agent.domain.quick_pick import QuickPick
 from camp_agent.domain.specialist import Team
 from camp_agent.guide.guide_types import GuideSection
 from camp_agent.llm.llm_types import (
@@ -21,7 +22,7 @@ class LlmPort(Protocol):
 
     async def split(self, text: str) -> list[str]: ...
 
-    async def classify(self, intent: str) -> Classification: ...
+    async def classify(self, intent: str, hint: QuickPick | None = None) -> Classification: ...
 
     async def answer(self, question: str, sections: Sequence[GuideSection]) -> GuideAnswer: ...
 

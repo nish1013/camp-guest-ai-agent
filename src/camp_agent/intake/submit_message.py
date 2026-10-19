@@ -52,9 +52,12 @@ class SubmitMessage:
             case = None
             if command.case_token is not None:
                 case = await self._joinable(conn, command.case_token)
+            # A pick belongs to a new request (D51); a message joining a case carries none.
+            pick = None
             if case is None:
                 case = await cases.create(secrets.token_urlsafe(32), command.scope)
-            if await MessageRepository(conn).insert(command.idempotency_key, case.id, text):
+                pick = command.pick
+            if await MessageRepository(conn).insert(command.idempotency_key, case.id, text, pick):
                 if command.qr_invalid:
                     await AuditRepository(conn).insert(case.id, INVALID_QR)
                 await tx.commit()

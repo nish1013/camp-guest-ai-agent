@@ -25,8 +25,10 @@ from camp_agent.guide.guide_copy import copy_from_guide
 from camp_agent.guide.guide_port import GuidePort
 from camp_agent.guide.markdown_guide import MarkdownGuide
 from camp_agent.http import guest, health, staff
+from camp_agent.http.case_panels import CasePanels
 from camp_agent.http.guest import GuestServices
 from camp_agent.http.staff import StaffServices
+from camp_agent.http.status_notifier import StatusNotifier
 from camp_agent.intake.apply_ticket_status import ApplyTicketStatus
 from camp_agent.intake.find_case import FindCase
 from camp_agent.intake.list_answers import ListAnswers
@@ -44,6 +46,8 @@ from camp_agent.intake.submit_step_up import SubmitStepUp
 from camp_agent.llm.llm_port import LlmPort
 from camp_agent.llm.pydantic_ai_llm import PydanticAiLlm
 from camp_agent.llm.retrying_llm import RetryingLlm
+from camp_agent.notification.log_notifications import LogNotifications
+from camp_agent.notification.notification_port import NotificationPort
 from camp_agent.qr.qr_token import QrTokens
 from camp_agent.staff.list_queue import ListQueue
 from camp_agent.staff.resolve_as_human import ResolveAsHuman
@@ -66,6 +70,7 @@ def create_app(
     guide: GuidePort | None = None,
     stays: StayContextPort | None = None,
     tickets: TicketPort | None = None,
+    notifications: NotificationPort | None = None,
 ) -> FastAPI:
     resolved = settings or Settings()
     camp_tz = ZoneInfo(resolved.camp_timezone)
@@ -78,6 +83,17 @@ def create_app(
         guide_port = guide or MarkdownGuide(resolved.guide_path)
         guide_copy = await copy_from_guide(guide_port)
         engine = make_engine(resolved)
+        panels = CasePanels(
+            resolved_clock,
+            desk,
+            guide_copy,
+            ListAnswers(engine),
+            ListFaults(engine, camp_tz),
+            ListBookings(engine),
+            ListDeclined(engine),
+            StepUpForm(engine, resolved.step_up_case_failures),
+        )
+        watch = StatusNotifier(engine, panels, notifications or LogNotifications())
         limiter = SlidingWindowLimiter(
             resolved.rate_limit_messages, timedelta(seconds=resolved.rate_limit_window_s)
         )
@@ -86,7 +102,7 @@ def create_app(
         )
         triage = graph or LangGraphTriage(
             retrying_llm,
-            PgTriageStore(engine),
+            PgTriageStore(engine, watch),
             resolved_clock,
             TriagePolicy(
                 safety,
@@ -124,25 +140,21 @@ def create_app(
                 timedelta(seconds=resolved.reopen_window_s),
             ),
             find_case=FindCase(engine),
-            list_answers=ListAnswers(engine),
-            list_faults=ListFaults(engine, ZoneInfo(resolved.camp_timezone)),
-            list_bookings=ListBookings(engine),
-            list_declined=ListDeclined(engine),
+            panels=panels,
             coordinator=coordinator,
             step_up=SubmitStepUp(engine, stay_port, resolved_clock, limits),
-            step_up_form=StepUpForm(engine, resolved.step_up_case_failures),
             answer=SubmitAnswer(engine, resolved_clock),
         )
         gate = timedelta(seconds=resolved.gate_timeout_s)
-        ticket_status = ApplyTicketStatus(engine, resolved_clock)
+        ticket_status = ApplyTicketStatus(engine, resolved_clock, watch)
         app.state.staff_services = StaffServices(
             settings=resolved,
             camp_timezone=camp_tz,
             queue=ListQueue(engine, resolved_clock, desk, gate),
             show_case=ShowCase(engine, resolved_clock, desk, gate),
-            booking_status=SetBookingStatus(engine, resolved_clock),
-            resolve=ResolveAsHuman(engine, resolved_clock),
-            restore=RestoreCase(engine, resolved_clock, stay_port),
+            booking_status=SetBookingStatus(engine, resolved_clock, watch),
+            resolve=ResolveAsHuman(engine, resolved_clock, watch),
+            restore=RestoreCase(engine, resolved_clock, stay_port, watch),
             coordinator=coordinator,
             tickets=DemoTicketStatus(engine),
             ticket_status=ticket_status,

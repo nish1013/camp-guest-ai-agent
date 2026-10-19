@@ -3,6 +3,7 @@ from collections.abc import Awaitable, Callable, Sequence
 import anyio
 
 from camp_agent.domain.cabin_reports import OpenReport
+from camp_agent.domain.quick_pick import QuickPick
 from camp_agent.domain.specialist import Team
 from camp_agent.guide.guide_types import GuideSection
 from camp_agent.llm.llm_error import LlmError
@@ -33,8 +34,8 @@ class RetryingLlm:
     async def split(self, text: str) -> list[str]:
         return await self._attempt(lambda: self._inner.split(text))
 
-    async def classify(self, intent: str) -> Classification:
-        return await self._attempt(lambda: self._inner.classify(intent))
+    async def classify(self, intent: str, hint: QuickPick | None = None) -> Classification:
+        return await self._attempt(lambda: self._inner.classify(intent, hint))
 
     async def answer(self, question: str, sections: Sequence[GuideSection]) -> GuideAnswer:
         return await self._attempt(lambda: self._inner.answer(question, sections))

@@ -7,6 +7,7 @@ from camp_agent.domain.audit_entry import AuditEntry, AuditValue
 from camp_agent.domain.case_state import CaseState, StateReason
 from camp_agent.domain.staff_resolution import restored_hold, staff_scope
 from camp_agent.domain.step_up import normalise_ref
+from camp_agent.notification.case_watch import CaseWatch
 from camp_agent.staff.restore_error import RestoreError
 from camp_agent.staff.staff_case_lock import StaffCaseLock
 from camp_agent.staff.staff_conflict_error import StaffConflictError
@@ -21,8 +22,14 @@ HAS_SCOPE = "This case already has a cabin and stay."
 
 
 class RestoreCase:
-    def __init__(self, engine: AsyncEngine, clock: Clock, stays: StayContextPort) -> None:
-        self._lock = StaffCaseLock(engine, clock)
+    def __init__(
+        self,
+        engine: AsyncEngine,
+        clock: Clock,
+        stays: StayContextPort,
+        watch: CaseWatch | None = None,
+    ) -> None:
+        self._lock = StaffCaseLock(engine, clock, watch)
         self._clock = clock
         self._stays = stays
 

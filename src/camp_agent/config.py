@@ -42,3 +42,5 @@ class Settings(BaseSettings):
     gate_timeout_s: int = 900
     reopen_window_s: int = 24 * 3600
     outbox_poll_s: float = 2.0
+    status_poll_s: float = 2.0
+    status_stream_s: float = 300.0

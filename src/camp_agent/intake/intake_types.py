@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from camp_agent.db.case_record import CaseRecord
+from camp_agent.domain.quick_pick import QuickPick
 from camp_agent.domain.scope import Scope
 
 
@@ -13,6 +14,7 @@ class SubmitMessageCommand:
     scope: Scope | None
     client_ip: str
     qr_invalid: bool = False
+    pick: QuickPick | None = None
 
 
 @dataclass(frozen=True)

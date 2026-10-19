@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 
 from camp_agent.domain.cabin_reports import OpenReport
+from camp_agent.domain.quick_pick import QuickPick
 from camp_agent.domain.specialist import Team
 from camp_agent.guide.guide_types import GuideSection
 from camp_agent.llm.llm_types import TableBrief, TicketBrief
@@ -34,6 +35,8 @@ CLASSIFY = (
     " urgency: urgent for no hot water, no heating in cold weather, leaks or anything unsafe;"
     " can_wait for routine requests such as towels; otherwise normal."
     " fault_type: for the fault route, the kind of fault; otherwise null."
+    " The guest may have tapped a topic before writing, given as 'Topic picked'. It is a hint"
+    " only: the guest's words decide, so a refund is a refund under any topic."
 )
 
 SAME_PROBLEM = (
@@ -71,6 +74,12 @@ ANSWER = (
     " If no section answers the question, set section_id to null and text to an empty string."
     " Never add a fact that is not in the section."
 )
+
+
+def classify_input(intent: str, hint: QuickPick | None) -> str:
+    if hint is None:
+        return intent
+    return f"Topic picked: {hint.label}\nGuest intent: {intent}"
 
 
 def answer_input(question: str, sections: Sequence[GuideSection]) -> str:

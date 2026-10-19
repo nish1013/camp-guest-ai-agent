@@ -1,4 +1,18 @@
 <form id="message-form" hx-post="/messages" hx-target="#case"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% if offer %}
+  <fieldset class="choice" data-offer>
+    <legend>Add to {{ offer.label }} or new request?</legend>
+    <label class="option"><input type="radio" name="target" value="case" required> Add to {{ offer.label }}</label>
+    <label class="option"><input type="radio" name="target" value="new" required> New request</label>
+    <input type="hidden" name="offered" value="{{ offer.token }}">
+  </fieldset>
+  {% endif %}
+  <fieldset class="picks" data-picks>
+    <legend>What is it about? (optional)</legend>
+    {% for pick in picks %}
+    <label class="option"><input type="radio" name="pick" value="{{ pick.value }}"> {{ pick.label }}</label>
+    {% endfor %}
+  </fieldset>
   <label for="text">How can we help?</label>
   <textarea id="text" name="text" required maxlength="2000"></textarea>
   {% if not scope %}

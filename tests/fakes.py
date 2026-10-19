@@ -12,6 +12,7 @@ from camp_agent.domain.case_state import CaseState
 from camp_agent.domain.case_status import CaseStatus
 from camp_agent.domain.fault_flow import FaultTask
 from camp_agent.domain.fault_type import FaultType
+from camp_agent.domain.quick_pick import QuickPick
 from camp_agent.domain.route_guard import Category, Route, TaskKind, TaskState
 from camp_agent.domain.scope import Scope
 from camp_agent.domain.specialist import Team
@@ -45,6 +46,7 @@ from camp_agent.llm.llm_types import (
     TicketBrief,
     Verdict,
 )
+from camp_agent.notification.notification_types import StatusNotice
 from camp_agent.stay.seed_stays import SeedStays
 from camp_agent.stay.stay_error import StayError
 from camp_agent.stay.stay_port import StayContextPort
@@ -129,6 +131,7 @@ class FakeLlm:
         self.calls: list[str] = []
         self.inputs: list[str] = []
         self.offered: list[str] = []
+        self.hints: list[QuickPick | None] = []
 
     async def verify(self, text: str) -> Verdict:
         self._call("verify", text)
@@ -138,8 +141,9 @@ class FakeLlm:
         self._call("split", text)
         return self._splits.get(text, [text])
 
-    async def classify(self, intent: str) -> Classification:
+    async def classify(self, intent: str, hint: QuickPick | None = None) -> Classification:
         self._call("classify", intent)
+        self.hints.append(hint)
         return self._classes.get(intent, QUESTION)
 
     async def answer(self, question: str, sections: Sequence[GuideSection]) -> GuideAnswer:
@@ -352,3 +356,17 @@ class InMemoryLockedCase:
 
     async def commit(self, step: StepRecord) -> None:
         await self._store.commit(self._case_id, step)
+
+
+class RecordingNotifications:
+    def __init__(self) -> None:
+        self.notices: list[StatusNotice] = []
+        self.down = False
+
+    async def notify(self, notice: StatusNotice) -> None:
+        if self.down:
+            raise ConnectionError("down")
+        self.notices.append(notice)
+
+    def statuses(self) -> list[str]:
+        return [notice.status for notice in self.notices]
