@@ -7,7 +7,7 @@ Status: draft, 2026-10-19
 
 ## Context
 
-**The brief.** [`brief.md`](brief.md). Stories, invariants and the model: [`domain.md`](domain.md).
+**The brief.** [`brief.md`](brief.md). Stories, invariants and the model: [`domain.md`](domain.md). Diagrams: [`architecture.md`](architecture.md).
 Every choice: [`decisions.md`](decisions.md), D1-D50.
 
 **Owner's decisions (2026-10-19):**
