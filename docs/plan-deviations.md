@@ -124,12 +124,12 @@ Built:    `messages` also has `parked` and `restored`. A run reports when its ba
 Why:      a park marks the message handled, so "triage runs again" has nothing to run without a record of which messages the park stopped. Running the LLM verdict again could park the case a second time against the staff decision. A verification park with no scope leaves its tasks waiting with the form hidden for good, so the stay is optional only for a spam park.
 Undo:     drop the two columns in a migration; a restore then only reopens the case and the guest must write again.
 
-## D18. A case closes on a staff change or a ticket status, not at the end of a run (PR 8, 2026-10-19)
+## D18. The run closes a case in a close step of its own (PR 8, 2026-10-19)
 
-Plan:     decisions.md D20: "A case closes when all its tasks are done or a human resolves it. A guest reply within 24 hours reopens it." PR 8 builds "case close and reopen".
-Built:    the close check runs after a resolve, a booking confirm or decline, and each applied ticket status. A run never closes a case, so a case whose only tasks are answered questions stays open. A message saved before a close reopens the case when its run starts.
-Why:      the stories that close a case (US12, US13) are staff and ticket changes. Closing at the end of every run would close each answered question at once and move the case on every exchange. A message saved before a staff close was accepted for that case, so dropping it would lose guest input (D6).
-Undo:     call the close check at the end of `RunCoordinator.drive`, under the lease.
+Plan:     decisions.md D20: "A case closes when all its tasks are done or a human resolves it. A guest reply within 24 hours reopens it." Request and graph flow: "each step: one aggregate, one audit entry (D44, I13)".
+Built:    when a run has nothing left to act on, a close step locks the case row, reads every task and closes the case when all are done, in one transaction with a `case: closed` audit entry. The step that finished the last task does not close the case itself. A resolve, a booking confirm or decline and each applied ticket status run the same check. A message saved before a close reopens the case when its run starts.
+Why:      the step that answers a question does not know whether later intents of the same message, or tasks still on their way to a desk, follow it. The close step runs after all of them and reads the tasks under the row lock, so a closed case never has an open task (I11). A message saved before the close was accepted for that case, so it is not lost (D6).
+Undo:     close inside the step that moves the last task to done, and drop the close step from the dispatch node.
 
 ## D19. Ticket status passes and ticket writes take a ticket lock (PR 8, 2026-10-19)
 

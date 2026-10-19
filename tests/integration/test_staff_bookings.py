@@ -159,8 +159,7 @@ def test_d20_reply_reopens_within_day(
 
     assert len(rows(db, "SELECT id FROM cases")) == cases
     assert (reply.cookies["case_token"] == token) is (cases == 1)
-    first = rows(db, "SELECT state FROM cases ORDER BY id")[0]
-    assert first == (("open",) if cases == 1 else ("closed",))
+    assert (("case", "reopened") in audit(db)) is (cases == 1)
 
 
 def test_d20_reopen_is_audited(triage_client: TestClient, db: Engine, clock: FakeClock) -> None:

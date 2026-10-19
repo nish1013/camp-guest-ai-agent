@@ -98,4 +98,5 @@ def test_i13_every_routing_step_audited(triage_client: TestClient, db: Engine) -
         ("classify", "question"),
         ("route_guard", "question"),
         ("answer", "no_section"),
+        ("case", "closed"),
     ]

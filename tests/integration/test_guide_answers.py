@@ -28,7 +28,7 @@ def test_us3_answer_cites_section(triage_client: TestClient, db: Engine) -> None
     assert tasks(db) == [("question", "done", "08:00-20:00", "pool-hours")]
     assert "08:00-20:00" in page
     assert "<span data-cited>pool-hours</span>" in page
-    assert audit(db)[-1] == ("answer", "cited")
+    assert audit(db)[-2:] == [("answer", "cited"), ("case", "closed")]
 
 
 def test_us3_no_section_gives_reception(triage_client: TestClient, db: Engine) -> None:
@@ -58,7 +58,7 @@ def test_d42_guide_down_gives_reception(
     send(triage_client, POOL)
 
     assert escape(f"{GUIDE_DOWN} {RECEPTION}") in triage_client.get("/").text
-    assert audit(db)[-1] == ("answer", "guide_down")
+    assert audit(db)[-2:] == [("answer", "guide_down"), ("case", "closed")]
 
 
 def test_us3_answer_only_on_question(db: Engine) -> None:

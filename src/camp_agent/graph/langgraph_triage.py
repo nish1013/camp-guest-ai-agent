@@ -85,19 +85,22 @@ class LangGraphTriage:
         return BatchOutcome.PARKED if final["parked"] else BatchOutcome.TRIAGED
 
     async def resume(self, case_id: int) -> None:
-        await self._resume_waiting(case_id)
+        moved = await self._resume_waiting(case_id)
         if (await self._next_task(case_id))["next"] != END:
             await self._invoke(start_state(case_id, "", "", DISPATCH))
+        elif moved:
+            await self._store.close_if_done(case_id, self._clock.now())
 
     async def _invoke(self, start: TriageState) -> TriageState:
         final = await self._graph.ainvoke(start, {"recursion_limit": _RECURSION_LIMIT})
         return cast(TriageState, final)
 
-    async def _resume_waiting(self, case_id: int) -> None:
+    async def _resume_waiting(self, case_id: int) -> bool:
         case = await self._store.load(case_id)
         if case.scope is None or not resumes_waiting(case.status, case.scope):
-            return
-        for task in await self._store.awaiting_scope(case_id):
+            return False
+        waiting = await self._store.awaiting_scope(case_id)
+        for task in waiting:
             decision = guard_route(
                 task.category,
                 Route(task.kind.value),
@@ -116,6 +119,7 @@ class LangGraphTriage:
                 continue
             move = TaskTransition(task.step_id, decision.state, TaskState.AWAITING_SCOPE)
             await self._store.commit(case_id, StepRecord(audit, transitions=(move,)))
+        return bool(waiting)
 
     async def _answer_waiting(self, case_id: int, task: WaitingTask, routed: AuditEntry) -> None:
         # The stay is not active, so the request gets a guide answer only (D19).
@@ -286,7 +290,11 @@ class LangGraphTriage:
         return await self._next_intent(state)
 
     async def _dispatch(self, state: TriageState) -> TriageUpdate:
-        return await self._next_task(state["case_id"])
+        update = await self._next_task(state["case_id"])
+        if update["next"] == END:
+            # Every task routed and nothing left to act on: D20 closes the case if all are done.
+            await self._store.close_if_done(state["case_id"], self._clock.now())
+        return update
 
     async def _next_task(self, case_id: int) -> TriageUpdate:
         case = await self._store.load(case_id)

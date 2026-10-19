@@ -34,14 +34,14 @@ async def test_us3_answer_cites_section() -> None:
     assert store.answers == [TaskAnswer("m1/t0", "08:00-20:00", "pool-hours")]
     assert [t.kind for t in store.tasks] == [TaskKind.QUESTION]
     assert "pool-hours" in llm.offered
-    assert steps(store)[-2:] == ["route_guard:question", "answer:cited"]
+    assert steps(store)[-3:] == ["route_guard:question", "answer:cited", "case:closed"]
 
 
 async def test_us3_no_section_gives_reception() -> None:
     store = await triage(FakeLlm(), SAUNA)
 
     assert store.answers == [TaskAnswer("m1/t0", NO_INFO, None)]
-    assert steps(store)[-1] == "answer:no_section"
+    assert steps(store)[-2] == "answer:no_section"
 
 
 async def test_us3_missing_section_withheld() -> None:
@@ -50,8 +50,8 @@ async def test_us3_missing_section_withheld() -> None:
     store = await triage(llm, SAUNA)
 
     assert store.answers == [TaskAnswer("m1/t0", NO_INFO, None)]
-    assert steps(store)[-1] == "answer:withheld"
-    assert store.audit[-1].detail == {"step_id": "m1/t0", "proposed": "spa-hours"}
+    assert steps(store)[-2] == "answer:withheld"
+    assert store.audit[-2].detail == {"step_id": "m1/t0", "proposed": "spa-hours"}
 
 
 async def test_us3_no_scope_answered() -> None:
@@ -60,7 +60,7 @@ async def test_us3_no_scope_answered() -> None:
     store = await triage(llm, POOL, store=new_store(scope=None))
 
     assert store.answers == [TaskAnswer("m1/t0", "08:00-20:00", "pool-hours")]
-    assert store.status(CASE).state is CaseState.OPEN
+    assert store.status(CASE).state is CaseState.CLOSED
 
 
 async def test_d42_guide_down_gives_reception() -> None:
@@ -72,7 +72,7 @@ async def test_d42_guide_down_gives_reception() -> None:
 
     assert store.answers == [TaskAnswer("m1/t0", f"{GUIDE_DOWN} {RECEPTION}", None)]
     assert "answer" not in llm.calls
-    assert steps(store)[-1] == "answer:guide_down"
+    assert steps(store)[-2] == "answer:guide_down"
 
 
 async def test_d16_answer_llm_down_held() -> None:

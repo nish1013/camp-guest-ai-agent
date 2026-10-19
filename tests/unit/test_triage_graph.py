@@ -6,7 +6,6 @@ import pytest
 from camp_agent.domain.case_state import CaseState, StateReason
 from camp_agent.domain.guest_status import (
     CLARIFY,
-    RECEIVED,
     WAITING_ON_RECEPTION,
     WITH_RECEPTION,
     guest_status,
@@ -163,8 +162,8 @@ async def test_us2_clear_answer_resets_rounds() -> None:
     store = await triage(llm, "it's broken", "the heater in the lounge")
 
     status = store.status(CASE)
-    assert (status.state, status.clarify_rounds) == (CaseState.OPEN, 0)
-    assert guest_status(status, GUIDANCE, RECEPTION) == RECEIVED
+    assert (status.state, status.clarify_rounds) == (CaseState.CLOSED, 0)
+    assert "clarify:asked" in steps(store)
 
 
 async def test_us2_two_intents_two_tasks() -> None:
@@ -247,6 +246,7 @@ async def test_us2_llm_down_held() -> None:
                 "classify:question",
                 "route_guard:question",
                 "answer:no_section",
+                "case:closed",
             ],
         ),
     ],
@@ -403,5 +403,5 @@ async def test_d19_resume_after_stay_ended_answers() -> None:
 
     assert [(t.kind, t.state) for t in store.tasks] == [(TaskKind.QUESTION, TaskState.QUEUED)]
     assert [a.step_id for a in store.answers] == ["m1/t0"]
-    assert steps(store)[-2:] == ["route_guard:question", "answer:no_section"]
+    assert steps(store)[-3:] == ["route_guard:question", "answer:no_section", "case:closed"]
     assert "draft_table" not in llm.calls

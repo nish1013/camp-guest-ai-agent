@@ -72,7 +72,7 @@ def test_us14_spam_restore_triages_again(
     reply = restore(triage_client, db)
 
     assert reply.status_code == 303
-    assert case_row(db)[:2] == ("open", None)
+    assert case_row(db)[:2] == ("closed", None)
     assert llm.calls.count("verify") == 1
     assert ("verify", "restored") in audit(db)
     assert rows(db, "SELECT kind, state FROM tasks") == [("question", "done")]
@@ -177,7 +177,7 @@ def test_d33_parked_twice_requeues_latest(
 
     restore(triage_client, db)
 
-    assert case_row(db)[:2] == ("open", None)
+    assert case_row(db)[:2] == ("closed", None)
     assert (llm.calls.count("verify"), llm.calls.count("classify")) == (2, 2)
     assert audit(db).count(("verify", "restored")) == 2
     assert rows(db, "SELECT summary FROM tasks ORDER BY id") == [(SPAM,), (SPAM_AGAIN,)]
@@ -206,7 +206,7 @@ def test_d19_restore_ended_stay_answers_table(
 
     restore(triage_client, db, "BK-39950")
 
-    assert case_row(db) == ("open", None, "C12", "staff")
+    assert case_row(db) == ("closed", None, "C12", "staff")
     assert rows(db, "SELECT kind, state, answer FROM tasks") == [("question", "done", PHONE)]
     assert "draft_table" not in llm.calls
     assert PHONE in triage_client.get("/").text

@@ -7,6 +7,8 @@ from zoneinfo import ZoneInfo
 from camp_agent.config import Settings
 from camp_agent.domain.audit_entry import AuditEntry
 from camp_agent.domain.cabin_reports import OpenReport, ReportDraft, SavedReport
+from camp_agent.domain.case_closure import TaskProgress, settled
+from camp_agent.domain.case_state import CaseState
 from camp_agent.domain.case_status import CaseStatus
 from camp_agent.domain.fault_flow import FaultTask
 from camp_agent.domain.fault_type import FaultType
@@ -247,6 +249,21 @@ class InMemoryTriageStore:
         if step.validation is not None:
             self.validations.append(step.validation)
         self.audit.append(step.audit)
+
+    async def close_if_done(self, case_id: int, now: datetime) -> None:
+        answered = {answer.step_id for answer in self.answers}
+        progress = [
+            TaskProgress(
+                TaskState.DONE if task.step_id in answered else task.state,
+                ticket.status if (ticket := self.tickets.get(task.step_id)) else None,
+            )
+            for task in self.tasks
+        ]
+        case = self.cases[case_id]
+        status = settled(case.status, progress, now)
+        if status.state is CaseState.CLOSED and case.status.state is not CaseState.CLOSED:
+            self.write_status(case_id, case.change(status))
+            self.audit.append(AuditEntry("case", "closed"))
 
     @asynccontextmanager
     async def lock_case(self, case_id: int) -> AsyncIterator["InMemoryLockedCase"]:

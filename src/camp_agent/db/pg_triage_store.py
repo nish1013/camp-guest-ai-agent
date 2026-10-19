@@ -1,13 +1,18 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from camp_agent.db.audit_repository import AuditRepository
 from camp_agent.db.case_repository import CaseRepository
 from camp_agent.db.pg_locked_case import PgLockedCase, write_step
 from camp_agent.db.report_repository import ReportRepository
 from camp_agent.db.task_repository import TaskRepository
+from camp_agent.domain.audit_entry import AuditEntry
 from camp_agent.domain.cabin_reports import ReportDraft, SavedReport
+from camp_agent.domain.case_closure import settled
+from camp_agent.domain.case_state import CaseState
 from camp_agent.domain.fault_flow import FaultTask
 from camp_agent.domain.route_guard import TaskState
 from camp_agent.domain.table_flow import TableTask
@@ -17,6 +22,8 @@ from camp_agent.graph.triage_types import (
     StepRecord,
     WaitingTask,
 )
+
+CLOSED = AuditEntry("case", "closed")
 
 
 class PgTriageStore:
@@ -57,6 +64,17 @@ class PgTriageStore:
         async with self._engine.begin() as conn:
             case = await CaseRepository(conn).lock(case_id)
             yield PgLockedCase(conn, case_id, CaseSnapshot(case.status, case.scope, case.version))
+
+    async def close_if_done(self, case_id: int, now: datetime) -> None:
+        async with self._engine.begin() as conn:
+            cases = CaseRepository(conn)
+            case = await cases.lock(case_id)
+            status = settled(case.status, await TaskRepository(conn).progress(case_id), now)
+            if status.state is not CaseState.CLOSED or case.status.state is CaseState.CLOSED:
+                return
+            if not await cases.save_status(case_id, status, case.version):
+                raise RuntimeError("a locked case changed")
+            await AuditRepository(conn).insert(case_id, CLOSED)
 
     async def commit(self, case_id: int, step: StepRecord) -> None:
         async with self._engine.begin() as conn:
