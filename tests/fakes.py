@@ -1,7 +1,15 @@
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from camp_agent.domain.route_guard import Category, Route
+from camp_agent.domain.urgency import Urgency
+from camp_agent.llm.llm_error import LlmError
+from camp_agent.llm.llm_types import Classification, Verdict
+
 CAMP_TZ = ZoneInfo("Europe/London")
+QUESTION = Classification(
+    category=Category.INFORMATION, route=Route.QUESTION, urgency=Urgency.NORMAL
+)
 
 
 class FakeClock:
@@ -20,3 +28,35 @@ class FakeClock:
 
 def oct_19(hour: int = 14) -> FakeClock:
     return FakeClock(datetime(2026, 10, 19, hour, tzinfo=CAMP_TZ).astimezone(UTC))
+
+
+class FakeLlm:
+    def __init__(
+        self,
+        verdicts: dict[str, Verdict] | None = None,
+        splits: dict[str, list[str]] | None = None,
+        classes: dict[str, Classification] | None = None,
+        down: bool = False,
+    ) -> None:
+        self._verdicts = verdicts or {}
+        self._splits = splits or {}
+        self._classes = classes or {}
+        self._down = down
+        self.calls: list[str] = []
+
+    async def verify(self, text: str) -> Verdict:
+        self._call("verify")
+        return self._verdicts.get(text, Verdict.GENUINE)
+
+    async def split(self, text: str) -> list[str]:
+        self._call("split")
+        return self._splits.get(text, [text])
+
+    async def classify(self, intent: str) -> Classification:
+        self._call("classify")
+        return self._classes.get(intent, QUESTION)
+
+    def _call(self, name: str) -> None:
+        self.calls.append(name)
+        if self._down:
+            raise LlmError("down")
