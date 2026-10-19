@@ -277,7 +277,7 @@ Booking requests stay in Intake: there is no F&B port in v1 (D12).
 | Aggregate | Root | Context | Identity | Guards invariants | Tables | Guard (key, constraint or version number) |
 | --- | --- | --- | --- | --- | --- | --- |
 | Case | `Case(case_id)` | Intake | case_id | I2, I3, I5-I11, I13 | `cases`, `tasks`, `validation_records`, `verification_attempts`, `audit_entries` | run lease on `cases` (I2). Version number on `cases` (I8, I10, I11). Unique `(case_id, step_id)` on `tasks` (I3). Composite FK `tasks (case_id, cabin)` to `cases (id, scope_cabin)` (I5). `CHECK` on `cases` (I7, I9) |
-| Cabin reports | `CabinReports(cabin_id)` | Intake | cabin_id | I4 | `reports` | transaction lock on the cabin id. Rows are insert-only |
+| Cabin reports | `CabinReports(cabin_id)` | Intake | cabin_id | I4 | `reports` | transaction lock on the cabin id. Rows are insert-only. Unique `(case_id, step_id)` stops a repeat insert on resume (D44) |
 
 No aggregate:
 
