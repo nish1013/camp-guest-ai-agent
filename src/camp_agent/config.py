@@ -1,3 +1,4 @@
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,3 +14,17 @@ class Settings(BaseSettings):
     run_lease_s: int = 120
     rate_limit_messages: int = 20
     rate_limit_window_s: int = 600
+
+    openai_api_key: SecretStr | None = None
+    llm_model: str = "gpt-4.1-mini"
+    llm_timeout_s: float = 20.0
+    llm_attempts: int = 3
+    llm_retry_delay_s: float = 1.0
+
+    safety_terms: list[str] = ["fire", "gas", "smoke", "flood", "medical", "injury"]
+    held_categories: list[str] = ["refund", "compensation", "cabin_move", "safety_close_out"]
+    clarify_max_rounds: int = 2
+    emergency_guidance: str = (
+        "If anyone is in danger, call 999 now and leave the cabin."
+        " Then call reception on 01632 960123. Reception has been alerted."
+    )

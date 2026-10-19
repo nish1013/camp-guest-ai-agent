@@ -49,9 +49,9 @@ Code decides and the LLM proposes (D24). Every step commits one aggregate and wr
 
 ```mermaid
 flowchart TD
-  In["message saved (I1)<br/>run lease claimed (I2)"] --> Safety{"safety rule<br/>(code)"}
+  In["PII masked, message saved (D3, I1)<br/>run lease claimed (I2)"] --> Safety{"safety rule<br/>(code)"}
   Safety -- hit --> Emergency["emergency guidance<br/>hold for human"]
-  Safety -- no --> Mask["mask PII (code)"] --> Verify{"verify (LLM)"}
+  Safety -- no --> Verify{"verify (LLM)"}
   Verify -- spam --> Park["park"]
   Verify -- unclear --> Clarify["clarify, max 2<br/>then hold"]
   Verify -- genuine --> Split["split intents (LLM)"]

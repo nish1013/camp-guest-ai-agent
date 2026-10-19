@@ -3,23 +3,40 @@ import secrets
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from camp_agent.clock import Clock
+from camp_agent.db.audit_repository import AuditRepository
 from camp_agent.db.case_repository import CaseRepository
 from camp_agent.db.message_repository import MessageRepository
+from camp_agent.domain.audit_entry import AuditEntry
+from camp_agent.domain.pii_masker import mask_pii
+from camp_agent.domain.safety_rule import SafetyRule
 from camp_agent.intake.intake_types import Accepted, RateLimited, SubmitMessageCommand, SubmitResult
 from camp_agent.intake.rate_limiter import SlidingWindowLimiter
 
+INVALID_QR = AuditEntry("qr_scope", "invalid_token")
+
 
 class SubmitMessage:
-    def __init__(self, engine: AsyncEngine, limiter: SlidingWindowLimiter, clock: Clock) -> None:
+    def __init__(
+        self,
+        engine: AsyncEngine,
+        limiter: SlidingWindowLimiter,
+        clock: Clock,
+        safety: SafetyRule,
+    ) -> None:
         self._engine = engine
         self._limiter = limiter
         self._clock = clock
+        self._safety = safety
 
     async def __call__(self, command: SubmitMessageCommand) -> SubmitResult:
         replay = await self._replay(command)
         if replay is not None:
             return replay
-        if not self._limiter.allow(self._limit_keys(command), self._clock.now()):
+        text = mask_pii(command.text)
+        # A safety message is never refused (D8), so it is checked before the limit is.
+        if not self._safety.hits(text) and not self._limiter.allow(
+            self._limit_keys(command), self._clock.now()
+        ):
             return RateLimited()
 
         async with self._engine.connect() as conn:
@@ -30,7 +47,9 @@ class SubmitMessage:
                 case = await cases.find_open_by_token(command.case_token)
             if case is None:
                 case = await cases.create(secrets.token_urlsafe(32), command.scope)
-            if await MessageRepository(conn).insert(command.idempotency_key, case.id, command.text):
+            if await MessageRepository(conn).insert(command.idempotency_key, case.id, text):
+                if command.qr_invalid:
+                    await AuditRepository(conn).insert(case.id, INVALID_QR)
                 await tx.commit()
                 return Accepted(case, replayed=False)
             await tx.rollback()
