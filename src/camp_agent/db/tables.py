@@ -32,6 +32,7 @@ cases = Table(
     Column("urgency", Text, nullable=False),
     Column("clarify_rounds", Integer, nullable=False),
     Column("held_at", DateTime(timezone=True)),
+    Column("closed_at", DateTime(timezone=True)),
     Column("version", Integer, nullable=False),
     Column("run_lease_owner", Uuid),
     Column("run_lease_until", DateTime(timezone=True)),
@@ -47,6 +48,8 @@ messages = Table(
     Column("text", Text, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("handled_at", DateTime(timezone=True)),
+    Column("parked", Boolean, nullable=False),
+    Column("restored", Boolean, nullable=False),
 )
 
 tasks = Table(
@@ -140,4 +143,14 @@ ip_verification_failures = Table(
     Column("id", BigInteger, primary_key=True),
     Column("ip", Text, nullable=False),
     Column("failed_at", DateTime(timezone=True), nullable=False),
+)
+
+ticket_events = Table(
+    "ticket_events",
+    metadata,
+    Column("id", BigInteger, primary_key=True),
+    Column("ticket_ref", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
 )

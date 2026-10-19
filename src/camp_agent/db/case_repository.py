@@ -1,3 +1,4 @@
+from collections.abc import Collection
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -18,13 +19,31 @@ class CaseRepository:
         self._conn = conn
 
     async def get(self, case_id: int) -> CaseRecord:
-        row = (await self._conn.execute(select(cases).where(cases.c.id == case_id))).one()
-        return self._record(row)
+        case = await self.find(case_id)
+        if case is None:
+            raise LookupError(f"no case {case_id}")
+        return case
+
+    async def find(self, case_id: int) -> CaseRecord | None:
+        row = (await self._conn.execute(select(cases).where(cases.c.id == case_id))).one_or_none()
+        return None if row is None else self._record(row)
 
     # Every status write is an UPDATE of this row, so it waits until the holder's commit.
     async def lock(self, case_id: int) -> CaseRecord:
+        case = await self.try_lock(case_id)
+        if case is None:
+            raise LookupError(f"no case {case_id}")
+        return case
+
+    async def try_lock(self, case_id: int) -> CaseRecord | None:
         query = select(cases).where(cases.c.id == case_id).with_for_update(key_share=True)
-        return self._record((await self._conn.execute(query)).one())
+        row = (await self._conn.execute(query)).one_or_none()
+        return None if row is None else self._record(row)
+
+    async def find_by_token(self, case_token: str) -> CaseRecord | None:
+        query = select(cases).where(cases.c.case_token == case_token)
+        row = (await self._conn.execute(query)).one_or_none()
+        return None if row is None else self._record(row)
 
     async def find_open_by_token(self, case_token: str) -> CaseRecord | None:
         query = select(cases).where(
@@ -32,6 +51,10 @@ class CaseRepository:
         )
         row = (await self._conn.execute(query)).one_or_none()
         return None if row is None else self._record(row)
+
+    async def in_states(self, states: Collection[CaseState]) -> list[CaseRecord]:
+        query = select(cases).where(cases.c.state.in_(states)).order_by(cases.c.id)
+        return [self._record(row) for row in (await self._conn.execute(query)).all()]
 
     async def create(self, case_token: str, scope: Scope | None) -> CaseRecord:
         values: dict[str, Any] = {"case_token": case_token, "state": CaseState.OPEN, "version": 0}
@@ -56,6 +79,7 @@ class CaseRepository:
                 "urgency": status.urgency,
                 "clarify_rounds": status.clarify_rounds,
                 "held_at": status.held_at,
+                "closed_at": status.closed_at,
             },
         )
 
@@ -118,5 +142,14 @@ class CaseRepository:
             urgency=Urgency(row.urgency),
             clarify_rounds=row.clarify_rounds,
             held_at=row.held_at,
+            closed_at=row.closed_at,
         )
-        return CaseRecord(row.id, row.case_token, status, scope, row.version)
+        return CaseRecord(
+            row.id,
+            row.case_token,
+            status,
+            scope,
+            row.version,
+            row.created_at,
+            row.run_lease_until,
+        )

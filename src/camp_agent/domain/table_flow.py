@@ -5,6 +5,9 @@ from datetime import date, time
 from camp_agent.domain.route_guard import TaskState
 
 TO_BOOK = frozenset({TaskState.QUEUED})
+REQUESTED = frozenset(
+    {TaskState.BOOKING_REQUESTED, TaskState.BOOKING_CONFIRMED, TaskState.BOOKING_DECLINED}
+)
 
 
 @dataclass(frozen=True)
@@ -13,6 +16,12 @@ class TableBooking:
     party: int
     day: date
     at: time
+
+
+@dataclass(frozen=True)
+class BookingRequest:
+    state: TaskState
+    booking: TableBooking
 
 
 @dataclass(frozen=True)

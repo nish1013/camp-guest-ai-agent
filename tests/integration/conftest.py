@@ -42,7 +42,7 @@ def db(migrated_url: str) -> Iterator[Engine]:
     with engine.begin() as conn:
         conn.execute(
             text(
-                "TRUNCATE messages, cases, ip_verification_failures, demo_tickets"
+                "TRUNCATE messages, cases, ip_verification_failures, demo_tickets, ticket_events"
                 " RESTART IDENTITY CASCADE"
             )
         )
@@ -86,7 +86,7 @@ def client(
     guide: SwitchableGuide,
     stays: SwitchableStays,
 ) -> Iterator[TestClient]:
-    settings = Settings(database_url=migrated_url, secret_key=SECRET)
+    settings = Settings(database_url=migrated_url, secret_key=SECRET, outbox_poll_s=0)
     app = create_app(settings, clock=clock, graph=graph, guide=guide, stays=stays)
     with TestClient(app) as test_client:
         yield test_client
@@ -111,6 +111,7 @@ def triage_client(
         secret_key=SECRET,
         llm_retry_delay_s=0,
         ticket_retry_delay_s=0,
+        outbox_poll_s=0,
     )
     app = create_app(settings, clock=clock, llm=llm, guide=guide, stays=stays)
     with TestClient(app) as test_client:

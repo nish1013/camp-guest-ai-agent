@@ -1,0 +1,97 @@
+{% extends "staff_base.html" %}
+{% block content %}
+{% set case = detail.case %}
+<h1>Case K{{ case.id }}</h1>
+{% if notice %}<p class="notice" data-notice>{{ notice }}</p>{% endif %}
+<p>
+  State: <strong data-state>{{ case.status.state }}{% if case.status.reason %}: {{ case.status.reason }}{% endif %}</strong>
+  {% if detail.overdue %}<span class="overdue" data-overdue>Overdue</span>{% endif %}<br>
+  Urgency: {{ case.status.urgency }}{% if case.status.safety %} (safety){% endif %}<br>
+  Scope: {% if case.scope %}{{ case.scope.cabin }}, {{ case.scope.stay_from }} to {{ case.scope.stay_to }} ({{ case.scope.source }}){% else %}none{% endif %}
+</p>
+
+<h2>Tasks</h2>
+<table>
+  <tr><th>Task</th><th>Kind</th><th>Urgency</th><th>State</th><th>Detail</th></tr>
+  {% for task in detail.tasks %}
+  <tr data-task="{{ task.step_id }}">
+    <td>{{ task.summary }}</td>
+    <td>{{ task.kind }}{% if task.category %} / {{ task.category }}{% endif %}</td>
+    <td>{{ task.urgency }}</td>
+    <td data-task-state>{{ task.state }}</td>
+    <td>
+      {% if task.ticket_ref %}{{ task.ticket_ref }}: {{ task.ticket_status }}
+      <form method="post" action="/staff/tickets/{{ task.ticket_ref }}/status" data-ticket-form>
+        <input type="hidden" name="case_id" value="{{ case.id }}">
+        <select name="status" aria-label="Ticket status">
+          {% for option in ["open", "in_progress", "done", "cancelled"] %}<option{% if task.ticket_status == option %} selected{% endif %}>{{ option }}</option>{% endfor %}
+        </select>
+        <button type="submit">Set status</button>
+      </form>
+      {% endif %}
+      {% if task.booking_party %}{{ task.booking_party }} at {{ task.booking_time.strftime("%H:%M") }} on {{ task.booking_date }}{% endif %}
+      {% if task.state == "held" %}
+      <form method="post" action="/staff/cases/{{ case.id }}/resolve" data-resolve-form>
+        <input type="hidden" name="version" value="{{ case.version }}">
+        <input type="hidden" name="step_id" value="{{ task.step_id }}">
+        {% if task.kind == "fault" %}
+        <select name="category" aria-label="Category">
+          {% for option in ["maintenance", "housekeeping"] %}<option{% if task.category == option %} selected{% endif %}>{{ option }}</option>{% endfor %}
+        </select>
+        <select name="urgency" aria-label="Urgency">
+          {% for option in ["urgent", "normal", "can_wait"] %}<option{% if task.urgency == option %} selected{% endif %}>{{ option }}</option>{% endfor %}
+        </select>
+        {% endif %}
+        <button type="submit" name="action" value="approve">Approve</button>
+        <button type="submit" name="action" value="reject">Reject</button>
+      </form>
+      {% endif %}
+      {% if task.state == "booking_requested" %}
+      <form method="post" action="/staff/bookings/{{ task.id }}/status" data-booking-form>
+        <input type="hidden" name="version" value="{{ case.version }}">
+        <button type="submit" name="decision" value="confirm">Confirm</button>
+        <button type="submit" name="decision" value="decline">Decline</button>
+      </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% if case.status.state == "held" and not detail.tasks | selectattr("state", "equalto", "held") | list %}
+<form method="post" action="/staff/cases/{{ case.id }}/resolve" data-resolve-form>
+  <input type="hidden" name="version" value="{{ case.version }}">
+  <button type="submit" name="action" value="approve">Approve</button>
+  <button type="submit" name="action" value="reject">Reject</button>
+</form>
+{% endif %}
+
+{% if case.status.state == "parked" %}
+<form method="post" action="/staff/cases/{{ case.id }}/restore" data-restore-form>
+  <input type="hidden" name="version" value="{{ case.version }}">
+  {% if not case.scope %}
+  <label for="booking_ref">Booking reference, confirmed by phone{% if case.status.reason != "verification" %} (optional){% endif %}</label>
+  <input id="booking_ref" name="booking_ref" maxlength="40" autocomplete="off"{% if case.status.reason == "verification" %} required{% endif %}>
+  {% endif %}
+  <button type="submit">Restore</button>
+</form>
+{% endif %}
+
+<h2>Messages</h2>
+{% for message in detail.messages %}
+<p data-message><small>{{ message.created_at.astimezone(tz).strftime("%d %b %H:%M") }}</small> {{ message.text }}</p>
+{% endfor %}
+
+<h2>Audit</h2>
+<table>
+  <tr><th>Time</th><th>Step</th><th>Decision</th><th>Detail</th></tr>
+  {% for line in detail.audit %}
+  <tr data-audit>
+    <td>{{ line.created_at.astimezone(tz).strftime("%H:%M:%S") }}</td>
+    <td>{{ line.step }}</td>
+    <td>{{ line.decision }}</td>
+    <td>{% for key, value in line.detail.items() %}{{ key }}={{ value }} {% endfor %}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

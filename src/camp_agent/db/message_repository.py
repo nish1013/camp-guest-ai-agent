@@ -5,6 +5,7 @@ from sqlalchemy import exists, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from camp_agent.db.staff_rows import StaffMessage
 from camp_agent.db.tables import messages
 from camp_agent.graph.triage_graph import PendingMessage
 
@@ -29,12 +30,21 @@ class MessageRepository:
 
     async def pending(self, case_id: int) -> list[PendingMessage]:
         query = (
-            select(messages.c.id, messages.c.text)
+            select(messages.c.id, messages.c.text, messages.c.restored)
             .where(messages.c.case_id == case_id, messages.c.handled_at.is_(None))
             .order_by(messages.c.id)
         )
         rows = (await self._conn.execute(query)).all()
-        return [PendingMessage(row.id, row.text) for row in rows]
+        return [PendingMessage(row.id, row.text, row.restored) for row in rows]
+
+    async def for_staff(self, case_id: int) -> list[StaffMessage]:
+        query = (
+            select(messages.c.id, messages.c.text, messages.c.created_at)
+            .where(messages.c.case_id == case_id)
+            .order_by(messages.c.id)
+        )
+        rows = (await self._conn.execute(query)).all()
+        return [StaffMessage(row.id, row.text, row.created_at) for row in rows]
 
     async def has_pending(self, case_id: int) -> bool:
         query = select(
@@ -43,9 +53,18 @@ class MessageRepository:
         found: bool = (await self._conn.execute(query)).scalar_one()
         return found
 
-    async def mark_handled(self, message_ids: list[int], now: datetime) -> None:
+    async def mark_handled(self, message_ids: list[int], now: datetime, parked: bool) -> None:
         await self._conn.execute(
             update(messages)
             .where(messages.c.id.in_(message_ids), messages.c.handled_at.is_(None))
-            .values(handled_at=now)
+            .values(handled_at=now, parked=parked, restored=False)
         )
+
+    async def requeue_parked(self, case_id: int, restored: bool) -> int:
+        queued = await self._conn.execute(
+            update(messages)
+            .where(messages.c.case_id == case_id, messages.c.parked)
+            .values(handled_at=None, parked=False, restored=restored)
+            .returning(messages.c.id)
+        )
+        return len(queued.all())

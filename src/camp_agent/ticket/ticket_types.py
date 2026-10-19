@@ -27,3 +27,10 @@ class TicketReceipt:
     ref: str
     status: TicketStatus
     version: int
+
+
+@dataclass(frozen=True)
+class TicketStatusChanged:
+    ticket_ref: str
+    status: TicketStatus
+    version: int

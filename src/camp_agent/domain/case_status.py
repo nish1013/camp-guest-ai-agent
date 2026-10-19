@@ -13,6 +13,7 @@ class CaseStatus:
     urgency: Urgency = Urgency.NORMAL
     clarify_rounds: int = 0
     held_at: datetime | None = None
+    closed_at: datetime | None = None
 
     def emergency(self, now: datetime) -> "CaseStatus":
         return replace(
@@ -22,6 +23,7 @@ class CaseStatus:
             safety=True,
             urgency=Urgency.URGENT,
             held_at=self.held_at or now,
+            closed_at=None,
         )
 
     def hold(self, reason: StateReason, now: datetime) -> "CaseStatus":
@@ -49,6 +51,35 @@ class CaseStatus:
 
     def understood(self) -> "CaseStatus":
         return replace(self, clarify_rounds=0)
+
+    def restore(self, held: StateReason | None, now: datetime) -> "CaseStatus":
+        # A staff restore ends the park (D33); work still held goes back to staff.
+        if self.state is not CaseState.PARKED:
+            return self
+        if held is None:
+            return replace(self, state=CaseState.OPEN, reason=None, held_at=None)
+        return replace(self, state=CaseState.HELD, reason=held, held_at=now)
+
+    def release(self) -> "CaseStatus":
+        # Staff settled the hold; the clarify count starts again for the next message.
+        if self.state is not CaseState.HELD:
+            return self
+        return replace(self, state=CaseState.OPEN, reason=None, held_at=None, clarify_rounds=0)
+
+    def close(self, now: datetime) -> "CaseStatus":
+        return replace(
+            self,
+            state=CaseState.CLOSED,
+            reason=None,
+            clarify_rounds=0,
+            held_at=None,
+            closed_at=now,
+        )
+
+    def reopen(self) -> "CaseStatus":
+        if self.state is not CaseState.CLOSED:
+            return self
+        return replace(self, state=CaseState.OPEN, closed_at=None)
 
     def raise_urgency(self, urgency: Urgency) -> "CaseStatus":
         return replace(self, urgency=higher_urgency(self.urgency, urgency))

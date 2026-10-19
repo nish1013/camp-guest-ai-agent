@@ -109,3 +109,31 @@ Plan:     Request and graph flow: "per task: classify (LLM) -> route guard (code
 Built:    classify and the route guard run per intent and save each task. Once every intent of the message is saved, a dispatch step takes the next saved task with work: faults first, then tables. The same step picks up a table that waited for scope, after a step-up.
 Why:      the fault lane already starts only after the route guard, so the split check sees every fault of the message (D10). One dispatch over saved tasks serves a new message, an answer and a step-up resume alike (D7). Faults go first because urgent work jumps the queue; a booking request waits for staff in any case (D12).
 Undo:     call the table desk from the route guard node for a queued table task, and give tables that waited for scope a resume path of their own.
+
+## D16. A staff write is refused while a run holds the case (PR 8, 2026-10-19)
+
+Plan:     Validation and responses: "409 | a staff action loses the version check (I8, I10, I11)". Accept for PR 8: "a staff action during a run gets 409".
+Built:    every staff write locks the case row, then refuses a form older than the case version or a case whose run lease is live, with 409. The `TicketStatusChanged` handler applies the same lease test and leaves the event in the outbox for the next pass.
+Why:      claiming the run lease does not move the version, and many run steps commit without a status change. A version check alone lets a restore or a resolve land between two steps of a live run. The lease test under the row lock is the same test the claim makes, so a staff write and a claim are ordered.
+Undo:     drop the `run_active` test in `staff/staff_case_lock.py` and `intake/apply_ticket_status.py`.
+
+## D17. A restore queues the messages the park stopped (PR 8, 2026-10-19)
+
+Plan:     US14: "K5 parked as spam | staff restore | triage runs again. The spam verdict is overridden (D33)." Endpoints: "`POST /staff/cases/{id}/restore` | optional stay id after failed step-up". Storage: `messages` has "idempotency_key unique, case_id, masked text".
+Built:    `messages` also has `parked` and `restored`. A run reports when its batch stopped on a parked case (a spam park, or a message on a parked case), and those messages are marked `parked`. A restore queues them again. After a spam park they run as a batch of their own and the verify step records `restored` with no LLM call. After a failed verification the restore needs the booking ref, which sets a scope with source `staff`; the ref is not stored or audited (D3).
+Why:      a park marks the message handled, so "triage runs again" has nothing to run without a record of which messages the park stopped. Running the LLM verdict again could park the case a second time against the staff decision. A verification park with no scope leaves its tasks waiting with the form hidden for good, so the stay is optional only for a spam park.
+Undo:     drop the two columns in a migration; a restore then only reopens the case and the guest must write again.
+
+## D18. The run closes a case in a close step of its own (PR 8, 2026-10-19)
+
+Plan:     decisions.md D20: "A case closes when all its tasks are done or a human resolves it. A guest reply within 24 hours reopens it." Request and graph flow: "each step: one aggregate, one audit entry (D44, I13)".
+Built:    when a run has nothing left to act on, a close step locks the case row, reads every task and closes the case when all are done, in one transaction with a `case: closed` audit entry. The step that finished the last task does not close the case itself. A resolve, a booking confirm or decline and each applied ticket status run the same check. A message saved before a close reopens the case when its run starts.
+Why:      the step that answers a question does not know whether later intents of the same message, or tasks still on their way to a desk, follow it. The close step runs after all of them and reads the tasks under the row lock, so a closed case never has an open task (I11). A message saved before the close was accepted for that case, so it is not lost (D6).
+Undo:     close inside the step that moves the last task to done, and drop the close step from the dispatch node.
+
+## D19. Ticket status passes and ticket writes take a ticket lock (PR 8, 2026-10-19)
+
+Plan:     domain.md, eventual consistency: "No inbox table: the version check makes repeats and out-of-order events harmless. An outbox row is deleted once handled."
+Built:    a status pass lists the tasks holding a ticket ref under `pg_advisory_lock` on that ref. A step that gives a task a ticket ref, by create or by link, takes the same lock in its transaction, before the case row, and copies the newest status any task with that ref holds. An event no task holds yet stays in the outbox.
+Why:      a link reads the earlier task's status before it commits. A pass that applied a newer status and deleted the event in between left the linked task behind for good, and a case that never sees "done" never closes (I11, I12). The version check cannot catch a task the pass never saw.
+Undo:     drop `lock_ticket` from `write_step` and the pass, and delete an event that matched no task.

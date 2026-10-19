@@ -18,7 +18,7 @@ from camp_agent.domain.scope import Scope, ScopeSource
 from camp_agent.domain.urgency import Urgency
 from camp_agent.graph.guide_answerer import GuideAnswerer
 from camp_agent.graph.langgraph_triage import LangGraphTriage
-from camp_agent.graph.triage_graph import PendingMessage
+from camp_agent.graph.triage_graph import BatchOutcome, PendingMessage
 from camp_agent.graph.triage_types import TaskDraft
 from camp_agent.intake.run_coordinator import RunCoordinator
 from camp_agent.intake.step_up_types import StepUpCommand, StepUpLimits, StepUpResult
@@ -55,10 +55,10 @@ class GatedTriage:
     async def resume(self, case_id: int) -> None:
         await self._inner.resume(case_id)
 
-    async def run(self, case_id: int, batch: list[PendingMessage]) -> None:
+    async def run(self, case_id: int, batch: list[PendingMessage]) -> BatchOutcome:
         self.entered.set()
         await self.gate.wait()
-        await self._inner.run(case_id, batch)
+        return await self._inner.run(case_id, batch)
 
 
 async def new_case(engine: AsyncEngine, token: str) -> int:

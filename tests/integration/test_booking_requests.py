@@ -16,6 +16,8 @@ TABLE = "table for 4 at 19:30 tonight"
 IS_IT_BOOKED = "is it booked?"
 POOL = "When does the pool open?"
 DINNER = Classification(category=Category.RESTAURANT, route=Route.TABLE, urgency=Urgency.NORMAL)
+REFUND = "I want a refund for last night"
+MONEY = Classification(category=Category.REFUND, route=Route.MONEY, urgency=Urgency.NORMAL)
 LINE = "<em>Table for 4 at 19:30 on 19 Oct</em>: Waiting for the restaurant to confirm"
 PHONE = "Call 01632 960124 to ask about a table."
 FORM = 'id="step-up-form"'
@@ -31,7 +33,7 @@ def llm() -> FakeLlm:
     # An answer that claims a booking: only the follow-up rule keeps it off the page.
     claims = GuideAnswer(text="Yes, your table is Booked.", section_id="restaurant")
     return FakeLlm(
-        classes={TABLE: DINNER},
+        classes={TABLE: DINNER, REFUND: MONEY},
         answers={IS_IT_BOOKED: claims, TABLE: GuideAnswer(text=PHONE, section_id="restaurant")},
     )
 
@@ -88,8 +90,9 @@ def test_us5_no_scope_step_up_then_request(triage_client: TestClient, db: Engine
 def test_d19_stay_ended_guide_answer(
     triage_client: TestClient, db: Engine, clock: FakeClock, llm: FakeLlm
 ) -> None:
+    # A held refund keeps the case open past its stay; an answered question would close it.
     triage_client.get(f"/q/{C12}")
-    send(triage_client, POOL)
+    send(triage_client, REFUND)
     clock.advance(timedelta(days=7))
 
     send(triage_client, TABLE)

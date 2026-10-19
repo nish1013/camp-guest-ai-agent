@@ -1,5 +1,6 @@
+import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import timedelta
 from zoneinfo import ZoneInfo
 
@@ -14,6 +15,7 @@ from camp_agent.config import Settings
 from camp_agent.db.engine import make_engine
 from camp_agent.db.pg_triage_store import PgTriageStore
 from camp_agent.db.probe import DatabaseProbe
+from camp_agent.domain.desk_hours import DeskHours
 from camp_agent.domain.safety_rule import SafetyRule
 from camp_agent.graph.guide_answerer import GuideAnswerer
 from camp_agent.graph.langgraph_triage import LangGraphTriage
@@ -22,12 +24,16 @@ from camp_agent.graph.triage_types import TriagePolicy
 from camp_agent.guide.guide_copy import copy_from_guide
 from camp_agent.guide.guide_port import GuidePort
 from camp_agent.guide.markdown_guide import MarkdownGuide
-from camp_agent.http import guest, health
+from camp_agent.http import guest, health, staff
 from camp_agent.http.guest import GuestServices
-from camp_agent.intake.find_open_case import FindOpenCase
+from camp_agent.http.staff import StaffServices
+from camp_agent.intake.apply_ticket_status import ApplyTicketStatus
+from camp_agent.intake.find_case import FindCase
 from camp_agent.intake.list_answers import ListAnswers
 from camp_agent.intake.list_bookings import ListBookings
+from camp_agent.intake.list_declined import ListDeclined
 from camp_agent.intake.list_faults import ListFaults
+from camp_agent.intake.outbox_poller import OutboxPoller
 from camp_agent.intake.rate_limiter import SlidingWindowLimiter
 from camp_agent.intake.run_coordinator import RunCoordinator
 from camp_agent.intake.step_up_form import StepUpForm
@@ -39,8 +45,14 @@ from camp_agent.llm.llm_port import LlmPort
 from camp_agent.llm.pydantic_ai_llm import PydanticAiLlm
 from camp_agent.llm.retrying_llm import RetryingLlm
 from camp_agent.qr.qr_token import QrTokens
+from camp_agent.staff.list_queue import ListQueue
+from camp_agent.staff.resolve_as_human import ResolveAsHuman
+from camp_agent.staff.restore_case import RestoreCase
+from camp_agent.staff.set_booking_status import SetBookingStatus
+from camp_agent.staff.show_case import ShowCase
 from camp_agent.stay.seed_stays import SeedStays
 from camp_agent.stay.stay_port import StayContextPort
+from camp_agent.ticket.demo_ticket_status import DemoTicketStatus
 from camp_agent.ticket.demo_tickets import DemoTickets
 from camp_agent.ticket.retrying_tickets import RetryingTickets
 from camp_agent.ticket.ticket_port import TicketPort
@@ -56,7 +68,9 @@ def create_app(
     tickets: TicketPort | None = None,
 ) -> FastAPI:
     resolved = settings or Settings()
-    resolved_clock = clock or SystemClock(ZoneInfo(resolved.camp_timezone))
+    camp_tz = ZoneInfo(resolved.camp_timezone)
+    resolved_clock = clock or SystemClock(camp_tz)
+    desk = DeskHours(resolved.desk_opens, resolved.desk_closes, camp_tz)
     safety = SafetyRule(resolved.safety_terms)
 
     @asynccontextmanager
@@ -93,25 +107,54 @@ def create_app(
             timedelta(seconds=resolved.step_up_ip_window_s),
         )
         stay_port = stays or SeedStays(resolved.stays_path)
+        coordinator = RunCoordinator(
+            engine, triage, resolved_clock, timedelta(seconds=resolved.run_lease_s)
+        )
         app.state.health_probe = DatabaseProbe(engine)
         app.state.guest_services = GuestServices(
             settings=resolved,
             clock=resolved_clock,
             guide_copy=guide_copy,
             qr_tokens=QrTokens(resolved.secret_key),
-            submit=SubmitMessage(engine, limiter, resolved_clock, safety),
-            find_open_case=FindOpenCase(engine),
+            submit=SubmitMessage(
+                engine,
+                limiter,
+                resolved_clock,
+                safety,
+                timedelta(seconds=resolved.reopen_window_s),
+            ),
+            find_case=FindCase(engine),
             list_answers=ListAnswers(engine),
             list_faults=ListFaults(engine, ZoneInfo(resolved.camp_timezone)),
             list_bookings=ListBookings(engine),
-            coordinator=RunCoordinator(
-                engine, triage, resolved_clock, timedelta(seconds=resolved.run_lease_s)
-            ),
+            list_declined=ListDeclined(engine),
+            coordinator=coordinator,
             step_up=SubmitStepUp(engine, stay_port, resolved_clock, limits),
             step_up_form=StepUpForm(engine, resolved.step_up_case_failures),
             answer=SubmitAnswer(engine, resolved_clock),
         )
+        gate = timedelta(seconds=resolved.gate_timeout_s)
+        ticket_status = ApplyTicketStatus(engine, resolved_clock)
+        app.state.staff_services = StaffServices(
+            settings=resolved,
+            camp_timezone=camp_tz,
+            queue=ListQueue(engine, resolved_clock, desk, gate),
+            show_case=ShowCase(engine, resolved_clock, desk, gate),
+            booking_status=SetBookingStatus(engine, resolved_clock),
+            resolve=ResolveAsHuman(engine, resolved_clock),
+            restore=RestoreCase(engine, resolved_clock, stay_port),
+            coordinator=coordinator,
+            tickets=DemoTicketStatus(engine),
+            ticket_status=ticket_status,
+        )
+        poller = None
+        if resolved.outbox_poll_s > 0:
+            poller = asyncio.create_task(OutboxPoller(ticket_status, resolved.outbox_poll_s).run())
         yield
+        if poller is not None:
+            poller.cancel()
+            with suppress(asyncio.CancelledError):
+                await poller
         await engine.dispose()
 
     app = FastAPI(title="Camp Guest AI Agent", lifespan=lifespan)
@@ -123,6 +166,7 @@ def create_app(
     )
     app.include_router(health.router)
     app.include_router(guest.router)
+    app.include_router(staff.router)
     return app
 
 

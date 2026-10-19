@@ -45,6 +45,9 @@ class TaskState(StrEnum):
     LINKING = "linking"
     TICKETED = "ticketed"
     BOOKING_REQUESTED = "booking_requested"
+    BOOKING_CONFIRMED = "booking_confirmed"
+    BOOKING_DECLINED = "booking_declined"
+    REJECTED = "rejected"
 
 
 @dataclass(frozen=True)

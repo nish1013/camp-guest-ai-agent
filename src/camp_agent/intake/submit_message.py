@@ -1,18 +1,23 @@
 import secrets
+from datetime import timedelta
 
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from camp_agent.clock import Clock
 from camp_agent.db.audit_repository import AuditRepository
+from camp_agent.db.case_record import CaseRecord
 from camp_agent.db.case_repository import CaseRepository
 from camp_agent.db.message_repository import MessageRepository
 from camp_agent.domain.audit_entry import AuditEntry
+from camp_agent.domain.case_closure import reopens
+from camp_agent.domain.case_state import CaseState
 from camp_agent.domain.pii_masker import mask_pii
 from camp_agent.domain.safety_rule import SafetyRule
 from camp_agent.intake.intake_types import Accepted, RateLimited, SubmitMessageCommand, SubmitResult
 from camp_agent.intake.rate_limiter import SlidingWindowLimiter
 
 INVALID_QR = AuditEntry("qr_scope", "invalid_token")
+REOPENED = AuditEntry("case", "reopened")
 
 
 class SubmitMessage:
@@ -22,11 +27,13 @@ class SubmitMessage:
         limiter: SlidingWindowLimiter,
         clock: Clock,
         safety: SafetyRule,
+        reopen_window: timedelta,
     ) -> None:
         self._engine = engine
         self._limiter = limiter
         self._clock = clock
         self._safety = safety
+        self._reopen_window = reopen_window
 
     async def __call__(self, command: SubmitMessageCommand) -> SubmitResult:
         replay = await self._replay(command)
@@ -44,7 +51,7 @@ class SubmitMessage:
             cases = CaseRepository(conn)
             case = None
             if command.case_token is not None:
-                case = await cases.find_open_by_token(command.case_token)
+                case = await self._joinable(conn, command.case_token)
             if case is None:
                 case = await cases.create(secrets.token_urlsafe(32), command.scope)
             if await MessageRepository(conn).insert(command.idempotency_key, case.id, text):
@@ -58,6 +65,22 @@ class SubmitMessage:
         if replay is None:
             raise RuntimeError("idempotency key conflicted but no message holds it")
         return replay
+
+    async def _joinable(self, conn: AsyncConnection, case_token: str) -> CaseRecord | None:
+        cases = CaseRepository(conn)
+        found = await cases.find_by_token(case_token)
+        if found is None or found.status.state is not CaseState.CLOSED:
+            return found
+        # A reply within the window reopens the case (D20); a later one starts a new case.
+        locked = await cases.lock(found.id)
+        if locked.status.state is not CaseState.CLOSED:
+            return locked
+        if not reopens(locked.status.closed_at, self._clock.now(), self._reopen_window):
+            return None
+        if not await cases.save_status(locked.id, locked.status.reopen(), locked.version):
+            raise RuntimeError("a locked case changed")
+        await AuditRepository(conn).insert(locked.id, REOPENED)
+        return await cases.get(locked.id)
 
     async def _replay(self, command: SubmitMessageCommand) -> Accepted | None:
         async with self._engine.connect() as conn:

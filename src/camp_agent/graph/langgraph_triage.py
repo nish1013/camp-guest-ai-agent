@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -16,7 +16,7 @@ from camp_agent.graph.fault_desk import FaultDesk
 from camp_agent.graph.guide_answerer import GuideAnswerer
 from camp_agent.graph.stale_case_error import StaleCaseError
 from camp_agent.graph.table_desk import TableDesk
-from camp_agent.graph.triage_graph import PendingMessage
+from camp_agent.graph.triage_graph import BatchOutcome, PendingMessage
 from camp_agent.graph.triage_state import (
     ANSWER,
     BOOKING,
@@ -46,6 +46,7 @@ from camp_agent.graph.triage_types import (
     TaskDraft,
     TaskTransition,
     TriagePolicy,
+    WaitingTask,
 )
 from camp_agent.llm.llm_error import LlmError
 from camp_agent.llm.llm_port import LlmPort
@@ -77,23 +78,29 @@ class LangGraphTriage:
         self._tables = TableDesk(llm, store, clock, policy)
         self._graph = self._build()
 
-    async def run(self, case_id: int, batch: list[PendingMessage]) -> None:
+    async def run(self, case_id: int, batch: list[PendingMessage]) -> BatchOutcome:
         text = "\n".join(message.text for message in batch)
-        await self._invoke(start_state(case_id, f"m{batch[0].id}", text, SAFETY))
+        restored = any(message.restored for message in batch)
+        final = await self._invoke(start_state(case_id, f"m{batch[0].id}", text, SAFETY, restored))
+        return BatchOutcome.PARKED if final["parked"] else BatchOutcome.TRIAGED
 
     async def resume(self, case_id: int) -> None:
-        await self._resume_waiting(case_id)
+        moved = await self._resume_waiting(case_id)
         if (await self._next_task(case_id))["next"] != END:
             await self._invoke(start_state(case_id, "", "", DISPATCH))
+        elif moved:
+            await self._store.close_if_done(case_id, self._clock.now())
 
-    async def _invoke(self, start: TriageState) -> None:
-        await self._graph.ainvoke(start, {"recursion_limit": _RECURSION_LIMIT})
+    async def _invoke(self, start: TriageState) -> TriageState:
+        final = await self._graph.ainvoke(start, {"recursion_limit": _RECURSION_LIMIT})
+        return cast(TriageState, final)
 
-    async def _resume_waiting(self, case_id: int) -> None:
+    async def _resume_waiting(self, case_id: int) -> bool:
         case = await self._store.load(case_id)
         if case.scope is None or not resumes_waiting(case.status, case.scope):
-            return
-        for task in await self._store.awaiting_scope(case_id):
+            return False
+        waiting = await self._store.awaiting_scope(case_id)
+        for task in waiting:
             decision = guard_route(
                 task.category,
                 Route(task.kind.value),
@@ -106,18 +113,47 @@ class LangGraphTriage:
                 "state": decision.state,
                 "scope": case.scope.source,
             }
-            await self._store.commit(
-                case_id,
-                StepRecord(
-                    AuditEntry(ROUTE_GUARD, decision.kind, detail),
-                    transitions=(
-                        TaskTransition(task.step_id, decision.state, TaskState.AWAITING_SCOPE),
-                    ),
-                ),
+            audit = AuditEntry(ROUTE_GUARD, decision.kind, detail)
+            if decision.kind is not task.kind:
+                await self._answer_waiting(case_id, task, audit)
+                continue
+            move = TaskTransition(task.step_id, decision.state, TaskState.AWAITING_SCOPE)
+            await self._store.commit(case_id, StepRecord(audit, transitions=(move,)))
+        return bool(waiting)
+
+    async def _answer_waiting(self, case_id: int, task: WaitingTask, routed: AuditEntry) -> None:
+        # The stay is not active, so the request gets a guide answer only (D19).
+        await self._store.commit(case_id, StepRecord(routed))
+        try:
+            checked = await self._answerer.answer(task.summary)
+        except LlmError:
+            case = await self._store.load(case_id)
+            status = case.status.hold(StateReason.LLM_FAILED, self._clock.now())
+            move = TaskTransition(
+                task.step_id, TaskState.HELD, TaskState.AWAITING_SCOPE, kind=TaskKind.QUESTION
             )
+            audit = AuditEntry(LLM_FAILED, status.state, {"failed_step": ANSWER})
+            await self._store.commit(
+                case_id, StepRecord(audit, case.change(status), transitions=(move,))
+            )
+            return
+        detail: dict[str, AuditValue] = {"step_id": task.step_id}
+        if checked.proposed is not None:
+            detail["proposed"] = checked.proposed
+        move = TaskTransition(
+            task.step_id, TaskState.QUEUED, TaskState.AWAITING_SCOPE, kind=TaskKind.QUESTION
+        )
+        answer = TaskAnswer(task.step_id, checked.text, checked.cited)
+        audit = AuditEntry(ANSWER, checked.outcome, detail)
+        await self._store.commit(case_id, StepRecord(audit, transitions=(move,), answers=(answer,)))
 
     async def _safety(self, state: TriageState) -> TriageUpdate:
         case = await self._store.load(state["case_id"])
+        if case.status.state is CaseState.CLOSED:
+            # The message was saved before the close, so it reopens the case as a reply does (D20).
+            reopen = case.change(case.status.reopen())
+            await self._commit(state, AuditEntry(SAFETY, "reopened"), reopen)
+            case = await self._store.load(state["case_id"])
         terms = self._policy.safety.hits(state["text"])
         if terms:
             task = TaskDraft(
@@ -137,7 +173,7 @@ class LangGraphTriage:
             return {"next": END}
         if case.status.state is CaseState.PARKED:
             await self._commit(state, AuditEntry(SAFETY, "stop_parked", {"input": state["text"]}))
-            return {"next": END}
+            return {"next": END, "parked": True}
         if not triages_follow_up(case.status, await self._store.task_states(state["case_id"])):
             await self._commit(state, AuditEntry(SAFETY, "joined", {"input": state["text"]}))
             return {"next": END}
@@ -145,6 +181,12 @@ class LangGraphTriage:
         return {"next": VERIFY}
 
     async def _verify(self, state: TriageState) -> TriageUpdate:
+        if state["restored"]:
+            # Staff restored the case from a spam park: their verdict stands, no LLM call (D33).
+            case = await self._store.load(state["case_id"])
+            audit = AuditEntry(VERIFY, "restored", {"input": state["text"]})
+            await self._commit(state, audit, case.change(case.status.understood()))
+            return {"next": SPLIT}
         try:
             verdict = await self._llm.verify(state["text"])
         except LlmError:
@@ -166,7 +208,7 @@ class LangGraphTriage:
             return {"next": END}
         status = case.status.park(StateReason.SPAM)
         await self._commit(state, AuditEntry(PARK, status.state), case.change(status))
-        return {"next": END}
+        return {"next": END, "parked": status.state is CaseState.PARKED}
 
     async def _clarify(self, state: TriageState) -> TriageUpdate:
         case = await self._store.load(state["case_id"])
@@ -248,7 +290,11 @@ class LangGraphTriage:
         return await self._next_intent(state)
 
     async def _dispatch(self, state: TriageState) -> TriageUpdate:
-        return await self._next_task(state["case_id"])
+        update = await self._next_task(state["case_id"])
+        if update["next"] == END:
+            # Every task routed and nothing left to act on: D20 closes the case if all are done.
+            await self._store.close_if_done(state["case_id"], self._clock.now())
+        return update
 
     async def _next_task(self, case_id: int) -> TriageUpdate:
         case = await self._store.load(case_id)

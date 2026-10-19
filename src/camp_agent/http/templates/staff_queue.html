@@ -1,0 +1,17 @@
+{% extends "staff_base.html" %}
+{% block content %}
+<h1>Queue</h1>
+<table>
+  <tr><th>Case</th><th>Cabin</th><th>Urgency</th><th>State</th><th>Since</th></tr>
+  {% for item in items %}
+  <tr data-case="{{ item.case.id }}">
+    <td><a href="/staff/cases/{{ item.case.id }}">K{{ item.case.id }}</a></td>
+    <td>{{ item.case.scope.cabin if item.case.scope else "-" }}</td>
+    <td>{{ item.case.status.urgency }}{% if item.case.status.safety %} (safety){% endif %}</td>
+    <td>{{ item.case.status.state }}{% if item.case.status.reason %}: {{ item.case.status.reason }}{% endif %}
+      {% if item.overdue %}<span class="overdue" data-overdue>Overdue</span>{% endif %}</td>
+    <td>{{ item.case.created_at.astimezone(tz).strftime("%d %b %H:%M") }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

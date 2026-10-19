@@ -131,8 +131,25 @@ sequenceDiagram
   Staff->>Demo: T7 -> in_progress
   Demo->>Outbox: same transaction: T7, in_progress, v2
   H->>Outbox: poll
+  H->>H: lock ticket T7, list its cases (plan-deviations D19)
   loop each task with ticket T7
-    H->>Case: one transaction: set status if v2 > stored
+    H->>Case: one transaction: set status if v2 > stored, close or reopen (D20)
+    Note over H,Case: a run holds the case: keep the event (D16)
   end
   H->>Outbox: delete handled row
+```
+
+## Staff writes
+
+Every staff action locks the case row first. A stale version or a live run lease is a 409
+(plan-deviations D16).
+
+```mermaid
+flowchart LR
+  Form["staff form<br/>case version"] --> Lock["lock case row"]
+  Lock --> Check{"version current,<br/>no live run?"}
+  Check -- no --> Conflict["409, page reloaded"]
+  Check -- yes --> Act["resolve, restore,<br/>booking status"]
+  Act --> Settle["close when every task is done,<br/>reopen on open work (I11)"]
+  Settle --> Drive["run picks up approved work<br/>and restored messages"]
 ```

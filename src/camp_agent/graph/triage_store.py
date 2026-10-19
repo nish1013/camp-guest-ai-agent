@@ -1,4 +1,5 @@
 from contextlib import AbstractAsyncContextManager
+from datetime import datetime
 from typing import Protocol
 
 from camp_agent.domain.cabin_reports import ReportDraft, SavedReport
@@ -33,6 +34,10 @@ class TriageStore(Protocol):
 
     # Holds the case row from the read to the commit, so no status write lands in between.
     def lock_case(self, case_id: int) -> AbstractAsyncContextManager[LockedCase]: ...
+
+    # Locks the case row, reads every task and closes the case when all are done (D20, I11),
+    # in one transaction.
+    async def close_if_done(self, case_id: int, now: datetime) -> None: ...
 
     # One graph step: the case changes, its tasks and its audit entry in one transaction (I13).
     # Raises StaleCaseError when the case changed since the status was computed.

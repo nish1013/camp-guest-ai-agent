@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from camp_agent.db.case_repository import CaseRepository
 from camp_agent.db.message_repository import MessageRepository
-from camp_agent.graph.triage_graph import PendingMessage
+from camp_agent.graph.triage_graph import BatchOutcome, PendingMessage
 from camp_agent.intake.run_coordinator import RunCoordinator
 from tests.fakes import oct_19
 
@@ -28,13 +28,14 @@ class GatedGraph:
     async def resume(self, case_id: int) -> None:
         pass
 
-    async def run(self, case_id: int, batch: list[PendingMessage]) -> None:
+    async def run(self, case_id: int, batch: list[PendingMessage]) -> BatchOutcome:
         self.active += 1
         self.max_active = max(self.max_active, self.active)
         self.batches.append([message.text for message in batch])
         self.entered.set()
         await self.gate.wait()
         self.active -= 1
+        return BatchOutcome.TRIAGED
 
 
 async def new_case(engine: AsyncEngine) -> int:
