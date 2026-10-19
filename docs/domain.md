@@ -217,7 +217,7 @@ As staff, I want to restore a parked case, so that a wrong park does not lose a 
 | I7 | A case scope names its source: QR, step-up or staff | immediate | `CHECK` | no |
 | I8 | A parked case has no tickets or booking requests | immediate | case root; version number on the case | yes: a staff restore during a run. The version number rejects the second write |
 | I9 | A case flagged safety is urgent and never parked | immediate | `CHECK` | no |
-| I10 | A case with 3 failed verifications is parked, unless staff restored it | immediate | case root; version number on the case | yes: as I8 |
+| I10 | A case with 3 failed verifications is parked, unless staff restored it or it is flagged safety | immediate | case root; version number on the case | yes: as I8 |
 | I11 | A closed case has no open task | immediate | case root; version number on the case | yes: a status change during a run. As I8 |
 | I12 | A task's status matches its ticket's status | eventual | `TicketStatusChanged` handler (D10, D40) | no |
 | I13 | Every routing decision has an audit entry | immediate | written in the same transaction | no |

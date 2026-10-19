@@ -65,3 +65,4 @@ Plan:     I10: "A case with 3 failed verifications is parked, unless staff resto
 Built:    the 3rd failure parks the case, held work included. A case flagged safety stays held. On any case with 3 failures the form is hidden and a further attempt is refused without a booking lookup.
 Why:      I9 says a safety case is never parked, and D8 puts safety first. The stored failure count, not the park, is what stops further guessing, so the limit still holds on a safety case.
 Undo:     none needed in code; I10 in domain.md would read "unless staff restored it or it is flagged safety".
+Closed:   PR 5, 2026-10-19. I10 in domain.md now reads "unless staff restored it or it is flagged safety".
