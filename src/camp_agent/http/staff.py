@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
@@ -15,10 +15,16 @@ from camp_agent.http.staff_auth import (
     require_staff,
 )
 from camp_agent.staff.list_queue import ListQueue
+from camp_agent.staff.set_booking_status import SetBookingStatus
 from camp_agent.staff.show_case import ShowCase
+from camp_agent.staff.staff_conflict_error import StaffConflictError
+from camp_agent.staff.staff_types import BookingDecision
 
 QUEUE_PATH = "/staff/cases"
 LOGIN_REFUSED = "Wrong user name or password."
+CASE_CHANGED = "This case changed since you opened it. It has been reloaded."
+
+Version = Annotated[int, Form(ge=0)]
 
 
 @dataclass(frozen=True)
@@ -27,6 +33,7 @@ class StaffServices:
     camp_timezone: ZoneInfo
     queue: ListQueue
     show_case: ShowCase
+    booking_status: SetBookingStatus
 
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
@@ -86,6 +93,35 @@ async def parked(request: Request, services: Services) -> HTMLResponse:
 @guarded.get("/cases/{case_id}", response_class=HTMLResponse)
 async def case_page(request: Request, services: Services, case_id: int) -> HTMLResponse:
     return await _case_page(request, services, case_id)
+
+
+@guarded.post("/bookings/{task_id}/status", response_model=None)
+async def booking_status(
+    request: Request,
+    services: Services,
+    task_id: int,
+    decision: Annotated[Literal["confirm", "decline"], Form()],
+    version: Version,
+) -> HTMLResponse | RedirectResponse:
+    command = BookingDecision(task_id, version, confirm=decision == "confirm")
+    try:
+        case_id = await services.booking_status(command)
+    except StaffConflictError as conflict:
+        return await _conflict(request, services, conflict)
+    if case_id is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    return _to_case(case_id)
+
+
+def _to_case(case_id: int) -> RedirectResponse:
+    return RedirectResponse(f"{QUEUE_PATH}/{case_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+async def _conflict(
+    request: Request, services: StaffServices, conflict: StaffConflictError
+) -> HTMLResponse:
+    case_id: int = conflict.args[0]
+    return await _case_page(request, services, case_id, CASE_CHANGED, status.HTTP_409_CONFLICT)
 
 
 async def _case_page(

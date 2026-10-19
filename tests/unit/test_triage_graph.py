@@ -15,7 +15,7 @@ from camp_agent.domain.scope import Scope, ScopeSource
 from camp_agent.domain.urgency import Urgency
 from camp_agent.graph.triage_types import StepRecord
 from camp_agent.llm.llm_types import Verdict
-from tests.fakes import FakeLlm, InMemoryTriageStore
+from tests.fakes import FakeLlm, InMemoryTriageStore, oct_19
 from tests.unit.triage_support import (
     C12,
     CASE,
@@ -339,3 +339,17 @@ async def test_us3_question_answered_beside_wait() -> None:
         (TaskKind.QUESTION, TaskState.QUEUED),
     ]
     assert len(store.answers) == 1
+
+
+async def test_i11_message_on_closed_case_reopens() -> None:
+    llm = FakeLlm(classes={"no hot water": HOT_WATER})
+    store = new_store()
+    case = store.cases[CASE]
+    store.write_status(CASE, case.change(case.status.close(oct_19().now())))
+
+    await triage(llm, "no hot water", store=store)
+
+    assert store.status(CASE).state is CaseState.OPEN
+    assert store.status(CASE).closed_at is None
+    assert steps(store)[:2] == ["safety:reopened", "safety:clear"]
+    assert [t.state for t in store.tasks] == [TaskState.TICKETED]

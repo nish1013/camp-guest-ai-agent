@@ -40,3 +40,4 @@ class Settings(BaseSettings):
     desk_opens: time = time(8)
     desk_closes: time = time(22)
     gate_timeout_s: int = 900
+    reopen_window_s: int = 24 * 3600

@@ -118,6 +118,11 @@ class LangGraphTriage:
 
     async def _safety(self, state: TriageState) -> TriageUpdate:
         case = await self._store.load(state["case_id"])
+        if case.status.state is CaseState.CLOSED:
+            # The message was saved before the close, so it reopens the case as a reply does (D20).
+            reopen = case.change(case.status.reopen())
+            await self._commit(state, AuditEntry(SAFETY, "reopened"), reopen)
+            case = await self._store.load(state["case_id"])
         terms = self._policy.safety.hits(state["text"])
         if terms:
             task = TaskDraft(

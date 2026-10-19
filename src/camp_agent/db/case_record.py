@@ -13,3 +13,4 @@ class CaseRecord:
     scope: Scope | None
     version: int
     created_at: datetime
+    run_lease_until: datetime | None = None

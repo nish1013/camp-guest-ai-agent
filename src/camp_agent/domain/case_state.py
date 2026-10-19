@@ -5,6 +5,7 @@ class CaseState(StrEnum):
     OPEN = "open"
     HELD = "held"
     PARKED = "parked"
+    CLOSED = "closed"
 
 
 class StateReason(StrEnum):

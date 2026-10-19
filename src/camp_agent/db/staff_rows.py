@@ -8,6 +8,12 @@ from camp_agent.domain.urgency import Urgency
 
 
 @dataclass(frozen=True)
+class TaskRef:
+    case_id: int
+    step_id: str
+
+
+@dataclass(frozen=True)
 class StaffTask:
     id: int
     step_id: str

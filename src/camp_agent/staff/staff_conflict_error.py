@@ -1,0 +1,2 @@
+class StaffConflictError(Exception):
+    pass

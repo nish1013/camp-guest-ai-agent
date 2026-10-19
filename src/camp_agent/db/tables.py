@@ -32,6 +32,7 @@ cases = Table(
     Column("urgency", Text, nullable=False),
     Column("clarify_rounds", Integer, nullable=False),
     Column("held_at", DateTime(timezone=True)),
+    Column("closed_at", DateTime(timezone=True)),
     Column("version", Integer, nullable=False),
     Column("run_lease_owner", Uuid),
     Column("run_lease_until", DateTime(timezone=True)),

@@ -17,3 +17,10 @@ class CaseDetail:
     tasks: list[StaffTask]
     messages: list[StaffMessage]
     audit: list[StaffAuditLine]
+
+
+@dataclass(frozen=True)
+class BookingDecision:
+    task_id: int
+    version: int
+    confirm: bool

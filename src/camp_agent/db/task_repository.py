@@ -6,12 +6,19 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from camp_agent.db.answered_question import AnsweredQuestion
-from camp_agent.db.staff_rows import StaffTask
+from camp_agent.db.staff_rows import StaffTask, TaskRef
 from camp_agent.db.tables import tasks
+from camp_agent.domain.case_closure import TaskProgress
 from camp_agent.domain.fault_flow import ACTIONABLE, FaultTask
 from camp_agent.domain.fault_type import FaultType
 from camp_agent.domain.route_guard import Category, TaskKind, TaskState
-from camp_agent.domain.table_flow import TO_BOOK, TableBooking, TableTask
+from camp_agent.domain.table_flow import (
+    REQUESTED,
+    TO_BOOK,
+    BookingRequest,
+    TableBooking,
+    TableTask,
+)
 from camp_agent.domain.ticket_status import TicketStatus
 from camp_agent.domain.urgency import Urgency
 from camp_agent.graph.triage_types import TaskAnswer, TaskDraft, TaskTransition, WaitingTask
@@ -106,17 +113,25 @@ class TaskRepository:
         rows = (await self._conn.execute(query)).all()
         return [TableTask(row.step_id, TaskState(row.state), row.summary) for row in rows]
 
-    async def booking_requests(self, case_id: int) -> list[TableBooking]:
+    async def booking_requests(self, case_id: int) -> list[BookingRequest]:
         query = (
-            select(tasks.c.cabin, tasks.c.booking_party, tasks.c.booking_date, tasks.c.booking_time)
-            .where(tasks.c.case_id == case_id, tasks.c.state == TaskState.BOOKING_REQUESTED)
+            select(tasks)
+            .where(tasks.c.case_id == case_id, tasks.c.state.in_(REQUESTED))
             .order_by(tasks.c.id)
         )
         rows = (await self._conn.execute(query)).all()
         return [
-            TableBooking(row.cabin, row.booking_party, row.booking_date, row.booking_time)
+            BookingRequest(
+                TaskState(row.state),
+                TableBooking(row.cabin, row.booking_party, row.booking_date, row.booking_time),
+            )
             for row in rows
         ]
+
+    async def find_by_id(self, task_id: int) -> TaskRef | None:
+        query = select(tasks.c.case_id, tasks.c.step_id).where(tasks.c.id == task_id)
+        row = (await self._conn.execute(query)).one_or_none()
+        return None if row is None else TaskRef(row.case_id, row.step_id)
 
     async def for_staff(self, case_id: int) -> list[StaffTask]:
         query = select(tasks).where(tasks.c.case_id == case_id).order_by(tasks.c.id)
@@ -134,6 +149,16 @@ class TaskRepository:
                 row.booking_party,
                 row.booking_date,
                 row.booking_time,
+            )
+            for row in (await self._conn.execute(query)).all()
+        ]
+
+    async def progress(self, case_id: int) -> list[TaskProgress]:
+        query = select(tasks.c.state, tasks.c.ticket_status).where(tasks.c.case_id == case_id)
+        return [
+            TaskProgress(
+                TaskState(row.state),
+                None if row.ticket_status is None else TicketStatus(row.ticket_status),
             )
             for row in (await self._conn.execute(query)).all()
         ]

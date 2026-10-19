@@ -13,6 +13,7 @@ class CaseStatus:
     urgency: Urgency = Urgency.NORMAL
     clarify_rounds: int = 0
     held_at: datetime | None = None
+    closed_at: datetime | None = None
 
     def emergency(self, now: datetime) -> "CaseStatus":
         return replace(
@@ -22,6 +23,7 @@ class CaseStatus:
             safety=True,
             urgency=Urgency.URGENT,
             held_at=self.held_at or now,
+            closed_at=None,
         )
 
     def hold(self, reason: StateReason, now: datetime) -> "CaseStatus":
@@ -49,6 +51,21 @@ class CaseStatus:
 
     def understood(self) -> "CaseStatus":
         return replace(self, clarify_rounds=0)
+
+    def close(self, now: datetime) -> "CaseStatus":
+        return replace(
+            self,
+            state=CaseState.CLOSED,
+            reason=None,
+            clarify_rounds=0,
+            held_at=None,
+            closed_at=now,
+        )
+
+    def reopen(self) -> "CaseStatus":
+        if self.state is not CaseState.CLOSED:
+            return self
+        return replace(self, state=CaseState.OPEN, closed_at=None)
 
     def raise_urgency(self, urgency: Urgency) -> "CaseStatus":
         return replace(self, urgency=higher_urgency(self.urgency, urgency))
