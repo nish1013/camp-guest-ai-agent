@@ -209,16 +209,16 @@ As staff, I want to restore a parked case, so that a wrong park does not lose a 
 | # | Invariant | Kind | Constraint that keeps it true | Can two requests break it together? |
 | --- | --- | --- | --- | --- |
 | I1 | A message is stored at most once per idempotency key | immediate | unique key on the idempotency key | yes: a client retry |
-| I2 | A case has at most one active run | immediate | lock on the case row. Runs and staff actions both take it | yes: two messages at once |
+| I2 | A case has at most one active run | immediate | run lease on the case row, claimed by a conditional update. No database lock is held during an LLM call (D46) | yes: two messages at once |
 | I3 | A ticket is created at most once per case and step | immediate | unique (case, step); `TicketPort.create` is idempotent on it (D5) | yes: a retry or a resumed run |
-| **I4** | **Every report in a cabin records the earlier open reports in that cabin it was checked against; none is missing** | immediate | lock on the cabin row while a report is checked and saved | **yes: the hard one. Two guests in one cabin report at the same moment** |
+| **I4** | **Every report in a cabin records the earlier open reports in that cabin it was checked against; none is missing** | immediate | transaction lock on the cabin id while a report is checked and saved (D38) | **yes: the hard one. Two guests in one cabin report at the same moment** |
 | I5 | A ticket's or booking request's cabin is its case's scope cabin | immediate | composite foreign key to the case scope | no |
 | I6 | Every ticket and booking request has a passing validation record for its step | immediate | written in the same transaction | no |
 | I7 | A case scope names its source: QR, step-up or staff | immediate | `CHECK` | no |
-| I8 | A parked case has no tickets or booking requests | immediate | case root, behind the I2 lock | no |
+| I8 | A parked case has no tickets or booking requests | immediate | case root; version number on the case | yes: a staff restore during a run. The version number rejects the second write |
 | I9 | A case flagged safety is urgent and never parked | immediate | `CHECK` | no |
-| I10 | A case with 3 failed verifications is parked, unless staff restored it | immediate | case root, behind the I2 lock | no |
-| I11 | A closed case has no open task | immediate | case root, behind the I2 lock | no |
+| I10 | A case with 3 failed verifications is parked, unless staff restored it | immediate | case root; version number on the case | yes: as I8 |
+| I11 | A closed case has no open task | immediate | case root; version number on the case | yes: a status change during a run. As I8 |
 | I12 | A task's status matches its ticket's status | eventual | `TicketStatusChanged` handler (D10, D40) | no |
 | I13 | Every routing decision has an audit entry | immediate | written in the same transaction | no |
 
@@ -231,3 +231,99 @@ Not invariants, and where they went:
 | No PII in the audit | about what is not stored | policy, D3 |
 | Rate limit, failed verifications per IP | about a request | AC on US2, US7 |
 | Only staff confirm a booking | precondition | AC on US13 |
+
+## Words used
+
+| Word | Context | Meaning |
+| --- | --- | --- |
+| Guest | Intake | Person talking to the agent. No login |
+| Sender | Intake | Anyone who submits, guest or not (US10) |
+| Staff | Intake | Reception or duty manager, behind the staff login (D9) |
+| Case | Intake | One conversation with a guest, reached by its case link (D4) |
+| Message | Intake | One guest submission, with its idempotency key |
+| Task | Intake | One intent of a case: a question, a fault, a table, a money ask, an emergency (D14) |
+| Run | Intake | One pass of the graph over a case. At most one at a time (I2) |
+| Scope | Intake | The cabin and stay a case may act on, and its source: QR, step-up or staff (I7) |
+| Step-up | Intake | Booking surname and ref checked against the stay (D2) |
+| Report | Intake | A fault as one guest reported it in one cabin. Checked against earlier open reports (I4) |
+| Fault type | Intake | A closed list in config: hot_water, heating, leak, electrics, ..., other |
+| Held | Intake | Waiting for a staff decision |
+| Overdue | Intake | Held longer than the gate timeout inside desk hours (D30). Derived |
+| Parked | Intake | Stopped with no staff work: spam or failed step-up (D2, D13) |
+| Safety flag | Intake | Set by the code rule on safety terms (D8) |
+| Urgency | Intake | urgent, normal, can_wait |
+| Validation record | Intake | Outcome of the arg checks for one step: pass, block, clarify |
+| Audit entry | Intake | One routing decision, masked input, tool args, validation outcome (D23) |
+| Ticket | Ticketing | One job for staff. Owned by the ticket system |
+| Booking request | Intake | A table asked for, waiting for staff to confirm or decline (D12) |
+| Cabin, stay, booking ref | Stay | Owned by the booking system |
+| Guide section | Guide | A guide entry with a stable id (D17) |
+| Desk hours | Intake | Hours reception is staffed. Config (D30) |
+
+## Contexts
+
+| Context | Owns (invariants, words) | Asks | Copies, and why |
+| --- | --- | --- | --- |
+| Intake (this app) | I1-I13. Case, message, task, run, scope, report, booking request, audit | Stay: step-up and staff restore (D41). Guide: answers (D42). Ticketing: create a ticket (D43) | Stay into scope: a snapshot of the stay at the moment scope is set. Ticket status onto the task: the owner may be down and the page polls often (D40). Emergency guidance and reception number: the guide may be down and an emergency must still be answered (D42) |
+| Ticketing (behind `TicketPort`) | Ticket and its status | none | none |
+| Stay (behind `StayContextPort`) | Cabin, stay, booking ref, surname | none | none |
+| Guide (behind `GuidePort`) | Guide sections | none | none |
+
+Ticketing, Stay and Guide are demo adapters in Compose and the camp's systems in a real deployment.
+Booking requests stay in Intake: there is no F&B port in v1 (D12).
+
+## Aggregates and data model
+
+| Aggregate | Root | Context | Identity | Guards invariants | Tables | Guard (key, constraint or version number) |
+| --- | --- | --- | --- | --- | --- | --- |
+| Case | `Case(case_id)` | Intake | case_id | I2, I3, I5-I11, I13 | `cases`, `tasks`, `validation_records`, `verification_attempts`, `audit_entries` | run lease on `cases` (I2). Version number on `cases` (I8, I10, I11). Unique `(case_id, step_id)` on `tasks` (I3). Composite FK `tasks (case_id, cabin)` to `cases (id, scope_cabin)` (I5). `CHECK` on `cases` (I7, I9) |
+| Cabin reports | `CabinReports(cabin_id)` | Intake | cabin_id | I4 | `reports` | transaction lock on the cabin id. Rows are insert-only |
+
+No aggregate:
+
+| Table | Why | Guard |
+| --- | --- | --- |
+| `messages` | Only I1, over the whole set | unique idempotency key. A message is saved without waiting on a run (D46) |
+| `ip_verification_failures` | Request check for D2, no invariant | none |
+| `ticket_events` | Outbox for I12 | none |
+| `demo_tickets` | The demo `TicketPort` adapter's own store, not Intake's | unique `(case_id, step_id)`: the idempotent create of D5 |
+| LangGraph checkpoints | Resume machinery owned by the library (D5) | none |
+
+**Places each fact lives:**
+
+| Fact | Lives in | Copy, and why |
+| --- | --- | --- |
+| Case scope (cabin, stay dates, source) | `cases` | snapshot of the stay system at the moment scope is set |
+| Ticket status | ticket system | copy on `tasks.ticket_status` + `ticket_version` (D40) |
+| Ticket ref | `tasks.ticket_ref` | linked tasks hold the same ref. It is a reference, not a copy |
+| Report open or closed | derived: report -> task -> ticket status | none |
+| Guest status text | derived from case state (D25) | none |
+| Overdue | derived from held time and desk hours (D30) | none |
+| Booking request and its status | `tasks` | none |
+| Routing decision | `audit_entries` | also in the LangGraph checkpoint while a run is live. The checkpoint resumes the run; the audit is the record (D23) |
+| Emergency guidance, reception number | guide | copy loaded at start-up (D42) |
+
+**Operation check.** A graph step is the unit of work: each step commits one aggregate (D44).
+
+| Story | Aggregate changed | Result |
+| --- | --- | --- |
+| US1 open from QR | none. The token sits in the session until the case is created | read only |
+| US2 send a message | `messages` (plain), then Case for the run | one aggregate |
+| US3, US5, US6, US7, US8, US10, US12, US14 | Case | one |
+| US4 report a fault | step 1: Cabin reports (insert the report). Step 2: Case (task and ticket ref) | one per step |
+| US9, US11 | none | read only |
+| US13 ticket status | ticket system, then `TicketStatusChanged`: one Case per transaction, one per linked task | one per transaction |
+| US13 booking status | Case | one |
+
+## Eventual consistency strategy
+
+| Eventual invariant | Strategy | Why |
+| --- | --- | --- |
+| I12 a task's status matches its ticket's status | in-process handler, outbox polled by the API process | one service, one database. No broker (D45) |
+
+| Event | Committed by | Carries | Handler | Changes |
+| --- | --- | --- | --- | --- |
+| `TicketStatusChanged` | demo adapter, in the same transaction as the status change. Real adapters: webhook or polling writes the outbox row | ticket_ref, status, version | `ApplyTicketStatus` | one Case per transaction, for each task with that ticket_ref. A version at or below the stored one is ignored |
+
+No inbox table: the version check makes repeats and out-of-order events harmless. An outbox row is
+deleted once handled. No broker means no replay window to keep.
