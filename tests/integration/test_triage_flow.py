@@ -9,10 +9,10 @@ from camp_agent.domain.route_guard import Category, Route
 from camp_agent.domain.urgency import Urgency
 from camp_agent.llm.llm_types import Classification, Verdict
 from camp_agent.qr.qr_token import QrTokens
-from tests.fakes import FakeLlm
+from tests.fakes import FakeLlm, SwitchableGuide, demo_section
 from tests.integration.intake_support import SECRET, audit, count, rows, send
 
-GUIDANCE = Settings().emergency_guidance
+GUIDANCE = demo_section("emergency").body
 C12 = QrTokens(SECRET).issue("C12", date(2026, 10, 18), date(2026, 10, 25))
 REFUND = Classification(category=Category.REFUND, route=Route.FAULT, urgency=Urgency.NORMAL)
 
@@ -27,6 +27,17 @@ def page_status(client: TestClient) -> str:
 
 def test_us6_emergency_shown_and_held(triage_client: TestClient, db: Engine) -> None:
     send(triage_client, "smoke coming from the heater")
+
+    assert case_row(db) == ("held", "emergency", True, "urgent")
+    assert GUIDANCE in page_status(triage_client)
+
+
+def test_us6_guidance_with_guide_down(
+    triage_client: TestClient, db: Engine, guide: SwitchableGuide
+) -> None:
+    guide.down = True
+
+    send(triage_client, "flood in the bathroom")
 
     assert case_row(db) == ("held", "emergency", True, "urgent")
     assert GUIDANCE in page_status(triage_client)
@@ -86,4 +97,5 @@ def test_i13_every_routing_step_audited(triage_client: TestClient, db: Engine) -
         ("split", "1"),
         ("classify", "question"),
         ("route_guard", "question"),
+        ("answer", "no_section"),
     ]

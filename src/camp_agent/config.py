@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -24,7 +26,4 @@ class Settings(BaseSettings):
     safety_terms: list[str] = ["fire", "gas", "smoke", "flood", "medical", "injury"]
     held_categories: list[str] = ["refund", "compensation", "cabin_move", "safety_close_out"]
     clarify_max_rounds: int = 2
-    emergency_guidance: str = (
-        "If anyone is in danger, call 999 now and leave the cabin."
-        " Then call reception on 01632 960123. Reception has been alerted."
-    )
+    guide_path: Path = Path("data/camp-guide.md")

@@ -34,6 +34,7 @@ class TaskState(StrEnum):
     QUEUED = "queued"
     AWAITING_SCOPE = "awaiting_scope"
     HELD = "held"
+    DONE = "done"
 
 
 @dataclass(frozen=True)

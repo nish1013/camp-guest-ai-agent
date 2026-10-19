@@ -58,6 +58,8 @@ tasks = Table(
     Column("urgency", Text, nullable=False),
     Column("state", Text, nullable=False),
     Column("summary", Text, nullable=False),
+    Column("answer", Text),
+    Column("answer_section", Text),
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
 

@@ -12,11 +12,11 @@ from camp_agent.domain.route_guard import Category, Route, TaskKind, TaskState
 from camp_agent.domain.urgency import Urgency
 from camp_agent.llm.llm_types import Verdict
 from tests.fakes import FakeLlm
-from tests.unit.triage_support import CASE, DEFAULTS, new_store, proposal, steps, triage
+from tests.unit.triage_support import CASE, new_store, proposal, steps, triage
 
 pytestmark = pytest.mark.anyio
 
-GUIDANCE = DEFAULTS.emergency_guidance
+GUIDANCE = "Call 999 now."
 REFUND = proposal(Category.REFUND, Route.MONEY, Urgency.NORMAL)
 HOT_WATER = proposal(Category.MAINTENANCE, Route.FAULT, Urgency.URGENT)
 DINNER = proposal(Category.RESTAURANT, Route.TABLE, Urgency.NORMAL)
@@ -220,8 +220,19 @@ async def test_us2_llm_down_held() -> None:
                 "route_guard:money",
             ],
         ),
+        (
+            ["pool?"],
+            [
+                "safety:clear",
+                "verify:genuine",
+                "split:1",
+                "classify:question",
+                "route_guard:question",
+                "answer:no_section",
+            ],
+        ),
     ],
-    ids=["safety", "verify-park", "parked", "clarify", "split-classify-guard"],
+    ids=["safety", "verify-park", "parked", "clarify", "split-classify-guard", "answer"],
 )
 async def test_i13_every_node_audits(texts: list[str], expected: list[str]) -> None:
     llm = FakeLlm(

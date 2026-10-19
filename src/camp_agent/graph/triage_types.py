@@ -26,10 +26,18 @@ class TaskDraft:
 
 
 @dataclass(frozen=True)
+class TaskAnswer:
+    step_id: str
+    text: str
+    section_id: str | None
+
+
+@dataclass(frozen=True)
 class StepRecord:
     audit: AuditEntry
     status: CaseStatus | None = None
     tasks: tuple[TaskDraft, ...] = ()
+    answers: tuple[TaskAnswer, ...] = ()
 
 
 @dataclass(frozen=True)

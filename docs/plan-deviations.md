@@ -36,3 +36,11 @@ Plan:     US6: "fixed emergency guidance from the guide, with phone numbers". PR
 Built:    the guidance is `EMERGENCY_GUIDANCE` in config, shown from the status template.
 Why:      PR 3 must pass US6 and has no `GuidePort`. The text is still fixed and needs no LLM, which is what D8 requires.
 Undo:     PR 4 replaces the config value with the copy loaded from the guide.
+Closed:   PR 4, 2026-10-19. `EMERGENCY_GUIDANCE` is gone from config. The guidance is the guide's `emergency` section, copied at start-up.
+
+## D6. Question tasks hold the guide answer (PR 4, 2026-10-19)
+
+Plan:     Storage: `tasks` has "case_id, step_id, kind, urgency, ..., state". No column holds a guide answer.
+Built:    `tasks` also has `answer` and `answer_section`, and a `done` state. A `CHECK` allows an answer only on a question task in state `done`.
+Why:      the answer text is written by the LLM (decisions.md, "Guide answer text"), so it cannot be derived on read like a status template. The guest page must show the answer and the section it cites (US3). A question is one task (D14), so its answer belongs on that task's row.
+Undo:     drop the two columns and the `done` state in a migration; keep answers in a table of their own keyed by `(case_id, step_id)`.

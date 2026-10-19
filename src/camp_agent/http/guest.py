@@ -11,11 +11,14 @@ from pydantic import StringConstraints
 
 from camp_agent.clock import Clock
 from camp_agent.config import Settings
+from camp_agent.db.answered_question import AnsweredQuestion
 from camp_agent.db.case_record import CaseRecord
 from camp_agent.domain.guest_status import guest_status
 from camp_agent.domain.scope import Scope
+from camp_agent.guide.guide_types import GuideCopy
 from camp_agent.intake.find_open_case import FindOpenCase
 from camp_agent.intake.intake_types import Accepted, SubmitMessageCommand
+from camp_agent.intake.list_answers import ListAnswers
 from camp_agent.intake.run_coordinator import RunCoordinator
 from camp_agent.intake.submit_message import SubmitMessage
 from camp_agent.qr.qr_token import QrOutcome, QrTokens
@@ -34,15 +37,18 @@ MessageText = Annotated[
 class CaseView:
     link: str
     status: str
+    answers: list[AnsweredQuestion]
 
 
 @dataclass(frozen=True)
 class GuestServices:
     settings: Settings
     clock: Clock
+    guide_copy: GuideCopy
     qr_tokens: QrTokens
     submit: SubmitMessage
     find_open_case: FindOpenCase
+    list_answers: ListAnswers
     coordinator: RunCoordinator
 
 
@@ -111,7 +117,7 @@ async def submit_message(
     response = templates.TemplateResponse(
         request,
         "_case.html",
-        {"case": _view(result.case, services.settings), "next_key": uuid4()},
+        {"case": await _view(result.case, services), "next_key": uuid4()},
     )
     response.set_cookie(
         CASE_COOKIE,
@@ -134,7 +140,7 @@ async def _page(request: Request, services: GuestServices) -> HTMLResponse:
         "index.html",
         {
             "scope": _scope(request, services),
-            "case": None if case is None else _view(case, services.settings),
+            "case": None if case is None else await _view(case, services),
             "next_key": uuid4(),
         },
     )
@@ -147,8 +153,9 @@ def _scope(request: Request, services: GuestServices) -> Scope | None:
     return services.qr_tokens.read(token, services.clock.today()).scope
 
 
-def _view(case: CaseRecord, settings: Settings) -> CaseView:
+async def _view(case: CaseRecord, services: GuestServices) -> CaseView:
     return CaseView(
         link=f"/c/{case.case_token}",
-        status=guest_status(case.status, settings.emergency_guidance),
+        status=guest_status(case.status, services.guide_copy.emergency),
+        answers=await services.list_answers(case.id),
     )

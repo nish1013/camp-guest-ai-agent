@@ -1,0 +1,2 @@
+class GuideError(Exception):
+    pass

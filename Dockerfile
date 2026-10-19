@@ -15,6 +15,7 @@ RUN uv sync --locked --no-dev --no-install-project
 COPY src ./src
 COPY migrations ./migrations
 COPY alembic.ini ./
+COPY data ./data
 RUN uv sync --locked --no-dev
 
 RUN useradd --system --uid 10001 app
