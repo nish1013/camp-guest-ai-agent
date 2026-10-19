@@ -1,0 +1,27 @@
+from uuid import uuid4
+
+from fastapi.testclient import TestClient
+from httpx2 import Response
+from sqlalchemy import Engine, text
+
+from camp_agent.graph.triage_graph import PendingMessage
+
+SECRET = "test-secret"
+
+
+class RecordingGraph:
+    def __init__(self) -> None:
+        self.batches: list[list[str]] = []
+
+    async def run(self, case_id: int, batch: list[PendingMessage]) -> None:
+        self.batches.append([message.text for message in batch])
+
+
+def send(client: TestClient, message: str, key: str | None = None) -> Response:
+    return client.post("/messages", data={"text": message, "idempotency_key": key or str(uuid4())})
+
+
+def count(db: Engine, table: str) -> int:
+    with db.connect() as conn:
+        found: int = conn.execute(text(f"SELECT count(*) FROM {table}")).scalar_one()
+    return found

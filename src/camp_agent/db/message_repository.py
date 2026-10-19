@@ -1,0 +1,51 @@
+from datetime import datetime
+from uuid import UUID
+
+from sqlalchemy import exists, select, update
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncConnection
+
+from camp_agent.db.tables import messages
+from camp_agent.graph.triage_graph import PendingMessage
+
+
+class MessageRepository:
+    def __init__(self, conn: AsyncConnection) -> None:
+        self._conn = conn
+
+    async def find_case_id(self, idempotency_key: UUID) -> int | None:
+        query = select(messages.c.case_id).where(messages.c.idempotency_key == idempotency_key)
+        case_id: int | None = (await self._conn.execute(query)).scalar_one_or_none()
+        return case_id
+
+    async def insert(self, idempotency_key: UUID, case_id: int, text: str) -> bool:
+        inserted = await self._conn.execute(
+            insert(messages)
+            .values(idempotency_key=idempotency_key, case_id=case_id, text=text)
+            .on_conflict_do_nothing(index_elements=["idempotency_key"])
+            .returning(messages.c.id)
+        )
+        return inserted.one_or_none() is not None
+
+    async def pending(self, case_id: int) -> list[PendingMessage]:
+        query = (
+            select(messages.c.id, messages.c.text)
+            .where(messages.c.case_id == case_id, messages.c.handled_at.is_(None))
+            .order_by(messages.c.id)
+        )
+        rows = (await self._conn.execute(query)).all()
+        return [PendingMessage(row.id, row.text) for row in rows]
+
+    async def has_pending(self, case_id: int) -> bool:
+        query = select(
+            exists().where(messages.c.case_id == case_id, messages.c.handled_at.is_(None))
+        )
+        found: bool = (await self._conn.execute(query)).scalar_one()
+        return found
+
+    async def mark_handled(self, message_ids: list[int], now: datetime) -> None:
+        await self._conn.execute(
+            update(messages)
+            .where(messages.c.id.in_(message_ids), messages.c.handled_at.is_(None))
+            .values(handled_at=now)
+        )
