@@ -65,4 +65,4 @@ class RunCoordinator:
                 return True
             if case.status.state is CaseState.PARKED:
                 return False
-            return await tasks.has_actionable_faults(case_id)
+            return await tasks.has_actionable(case_id)

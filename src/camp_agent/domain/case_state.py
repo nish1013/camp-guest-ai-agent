@@ -14,6 +14,7 @@ class StateReason(StrEnum):
     CLARIFY_LIMIT = "clarify_limit"
     FAULT_REVIEW = "fault_review"
     TICKETING_DOWN = "ticketing_down"
+    BOOKING_REVIEW = "booking_review"
     SPAM = "spam"
     VERIFICATION = "verification"
 

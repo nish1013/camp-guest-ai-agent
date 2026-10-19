@@ -1,7 +1,7 @@
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import replace
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from camp_agent.config import Settings
@@ -13,6 +13,7 @@ from camp_agent.domain.fault_type import FaultType
 from camp_agent.domain.route_guard import Category, Route, TaskKind, TaskState
 from camp_agent.domain.scope import Scope
 from camp_agent.domain.specialist import Team
+from camp_agent.domain.table_flow import TableBooking, TableTask
 from camp_agent.domain.ticket_status import CLOSED_TICKET_STATES, TicketStatus
 from camp_agent.domain.urgency import Urgency
 from camp_agent.graph.stale_case_error import StaleCaseError
@@ -36,6 +37,8 @@ from camp_agent.llm.llm_types import (
     Classification,
     GuideAnswer,
     SameProblem,
+    TableArgs,
+    TableBrief,
     TicketArgs,
     TicketBrief,
     Verdict,
@@ -107,6 +110,7 @@ class FakeLlm:
         answers: dict[str, GuideAnswer] | None = None,
         same: dict[str, int] | None = None,
         drafts: dict[str, list[TicketArgs]] | None = None,
+        tables: dict[str, list[TableArgs]] | None = None,
         down: bool = False,
     ) -> None:
         self._verdicts = verdicts or {}
@@ -115,9 +119,11 @@ class FakeLlm:
         self._answers = answers or {}
         self._same = same or {}
         self._drafts = drafts or {}
+        self._tables = tables or {}
         self._down = down
         self.down_for: set[str] = set()
         self.briefs: list[TicketBrief] = []
+        self.table_briefs: list[TableBrief] = []
         self.calls: list[str] = []
         self.inputs: list[str] = []
         self.offered: list[str] = []
@@ -151,11 +157,25 @@ class FakeLlm:
             return queued.pop(0)
         return TicketArgs(tool="create_ticket", cabin=brief.cabin, summary=brief.fault)
 
+    async def draft_table(self, brief: TableBrief) -> TableArgs:
+        self._call("draft_table", brief.request)
+        self.table_briefs.append(brief)
+        queued = self._tables.get(brief.request)
+        if queued:
+            return queued.pop(0)
+        return table_args(brief.cabin, brief.today)
+
     def _call(self, name: str, *inputs: str) -> None:
         self.calls.append(name)
         self.inputs.extend(inputs)
         if self._down or name in self.down_for:
             raise LlmError("down")
+
+
+def table_args(
+    cabin: str = "C12", day: date | None = date(2026, 10, 19), party: int | None = 4
+) -> TableArgs:
+    return TableArgs(tool="request_table", cabin=cabin, party=party, date=day, time=time(19, 30))
 
 
 class SwitchableStays:
@@ -199,6 +219,7 @@ class InMemoryTriageStore:
         self.tickets: dict[str, TicketLink] = {}
         self.same: dict[str, int] = {}
         self.validations: list[ValidationRecord] = []
+        self.bookings: dict[str, TableBooking] = {}
         self.reports: list[tuple[ReportDraft, SavedReport]] = []
 
     def add_case(self, case_id: int, scope: Scope | None = None) -> None:
@@ -221,6 +242,8 @@ class InMemoryTriageStore:
                         self.tickets[task.step_id] = move.ticket
                     if move.same_report_id is not None:
                         self.same[task.step_id] = move.same_report_id
+                    if move.booking is not None:
+                        self.bookings[task.step_id] = move.booking
         if step.validation is not None:
             self.validations.append(step.validation)
         self.audit.append(step.audit)
@@ -245,6 +268,13 @@ class InMemoryTriageStore:
             )
             for task in self.tasks
             if task.kind is TaskKind.FAULT
+        ]
+
+    async def tables(self, case_id: int) -> list[TableTask]:
+        return [
+            TableTask(task.step_id, task.state, task.summary)
+            for task in self.tasks
+            if task.kind is TaskKind.TABLE
         ]
 
     async def save_report(self, case_id: int, draft: ReportDraft) -> SavedReport:

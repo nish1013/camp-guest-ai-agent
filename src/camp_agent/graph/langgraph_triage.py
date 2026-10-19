@@ -15,12 +15,15 @@ from camp_agent.domain.urgency import Urgency
 from camp_agent.graph.fault_desk import FaultDesk
 from camp_agent.graph.guide_answerer import GuideAnswerer
 from camp_agent.graph.stale_case_error import StaleCaseError
+from camp_agent.graph.table_desk import TableDesk
 from camp_agent.graph.triage_graph import PendingMessage
 from camp_agent.graph.triage_state import (
     ANSWER,
+    BOOKING,
     CLARIFY,
     CLASSIFY,
     CONFIRM_SPLIT,
+    DISPATCH,
     LINK,
     LLM_FAILED,
     PARK,
@@ -71,6 +74,7 @@ class LangGraphTriage:
         self._policy = policy
         self._answerer = answerer
         self._faults = FaultDesk(llm, store, tickets, clock)
+        self._tables = TableDesk(llm, store, clock, policy)
         self._graph = self._build()
 
     async def run(self, case_id: int, batch: list[PendingMessage]) -> None:
@@ -79,11 +83,8 @@ class LangGraphTriage:
 
     async def resume(self, case_id: int) -> None:
         await self._resume_waiting(case_id)
-        update = await self._faults.route(case_id)
-        if update["next"] != END:
-            await self._invoke(
-                start_state(case_id, "", "", update["next"], update.get("fault", ""))
-            )
+        if (await self._next_task(case_id))["next"] != END:
+            await self._invoke(start_state(case_id, "", "", DISPATCH))
 
     async def _invoke(self, start: TriageState) -> None:
         await self._graph.ainvoke(start, {"recursion_limit": _RECURSION_LIMIT})
@@ -246,6 +247,19 @@ class LangGraphTriage:
         await self._commit(state, AuditEntry(ANSWER, checked.outcome, detail), answers=(answer,))
         return await self._next_intent(state)
 
+    async def _dispatch(self, state: TriageState) -> TriageUpdate:
+        return await self._next_task(state["case_id"])
+
+    async def _next_task(self, case_id: int) -> TriageUpdate:
+        case = await self._store.load(case_id)
+        if case.status.state is CaseState.PARKED:
+            return {"next": END}
+        # Faults go first: urgent work jumps the queue.
+        update = await self._faults.next_step(case_id)
+        if update is None:
+            update = await self._tables.next_step(case_id)
+        return update or {"next": END}
+
     async def _llm_failed(self, state: TriageState) -> TriageUpdate:
         case = await self._store.load(state["case_id"])
         status = case.status.hold(StateReason.LLM_FAILED, self._clock.now())
@@ -267,7 +281,7 @@ class LangGraphTriage:
         index = state["index"] + 1
         if index < len(state["intents"]):
             return {"next": CLASSIFY, "index": index}
-        return {**await self._faults.route(state["case_id"]), "index": index}
+        return {"next": DISPATCH, "index": index}
 
     def _build(self) -> CompiledStateGraph[TriageState, Any, TriageState, TriageState]:
         builder = StateGraph(TriageState)
@@ -286,6 +300,8 @@ class LangGraphTriage:
             SAME: self._faults.same,
             SPECIALIST: self._faults.specialist,
             LINK: self._faults.link,
+            BOOKING: self._tables.book,
+            DISPATCH: self._dispatch,
         }
         for name, node in nodes.items():
             builder.add_node(name, node, retry_policy=_STALE_RETRY)

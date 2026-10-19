@@ -4,7 +4,7 @@ from camp_agent.domain.case_state import CaseState
 from camp_agent.domain.case_status import CaseStatus
 from camp_agent.domain.route_guard import TaskState
 
-_ACTED = frozenset({TaskState.TICKETED})
+_ACTED = frozenset({TaskState.TICKETED, TaskState.BOOKING_REQUESTED})
 _ASKING = frozenset({TaskState.AWAITING_SCOPE, TaskState.AWAITING_SPLIT, TaskState.AWAITING_SAME})
 
 

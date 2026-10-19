@@ -10,6 +10,7 @@ from sqlalchemy import (
     MetaData,
     Table,
     Text,
+    Time,
     Uuid,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -67,6 +68,9 @@ tasks = Table(
     Column("ticket_status", Text),
     Column("ticket_version", Integer),
     Column("same_report_id", BigInteger),
+    Column("booking_party", Integer),
+    Column("booking_date", Date),
+    Column("booking_time", Time),
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
 

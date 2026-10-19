@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from camp_agent.domain.cabin_reports import OpenReport
 from camp_agent.domain.specialist import Team
 from camp_agent.guide.guide_types import GuideSection
-from camp_agent.llm.llm_types import TicketBrief
+from camp_agent.llm.llm_types import TableBrief, TicketBrief
 
 _CONTEXT = (
     "You help triage messages sent by guests of a holiday camp to its 24x7 assistant."
@@ -55,6 +55,15 @@ SPECIALISTS = {
     Team.HOUSEKEEPING: f"You are the camp's housekeeping specialist. {_SPECIALIST}",
 }
 
+RESTAURANT = (
+    f"You are the camp's restaurant specialist. {_CONTEXT} Draft one table booking request for"
+    " the guest request given. Set tool to request_table and cabin to the guest cabin given."
+    " Set party to the number of guests, and date and time to when the guest wants to eat."
+    " Resolve words such as tonight or tomorrow against today's date given."
+    " Set a field to null when the guest did not give it. Never add a detail the guest did not"
+    " give."
+)
+
 ANSWER = (
     f"{_CONTEXT} Answer the guest's question using only the camp guide sections given."
     " Each section starts with its id in square brackets. Set section_id to the id of the one"
@@ -76,6 +85,16 @@ def same_problem_input(fault: str, earlier: Sequence[OpenReport]) -> str:
 
 def ticket_input(brief: TicketBrief) -> str:
     text = f"Guest cabin: {brief.cabin}\nGuest fault: {brief.fault}"
+    if brief.rejected_for:
+        text += f"\nYour last draft was rejected: {'; '.join(brief.rejected_for)}."
+    return text
+
+
+def table_input(brief: TableBrief) -> str:
+    text = (
+        f"Guest cabin: {brief.cabin}\nToday: {brief.today}\n"
+        f"Stay: {brief.stay_from} to {brief.stay_to}\nGuest request: {brief.request}"
+    )
     if brief.rejected_for:
         text += f"\nYour last draft was rejected: {'; '.join(brief.rejected_for)}."
     return text

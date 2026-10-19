@@ -8,6 +8,8 @@ from camp_agent.llm.llm_types import (
     Classification,
     GuideAnswer,
     SameProblem,
+    TableArgs,
+    TableBrief,
     TicketArgs,
     TicketBrief,
     Verdict,
@@ -26,3 +28,5 @@ class LlmPort(Protocol):
     async def same_problem(self, fault: str, earlier: Sequence[OpenReport]) -> SameProblem: ...
 
     async def draft_ticket(self, team: Team, brief: TicketBrief) -> TicketArgs: ...
+
+    async def draft_table(self, brief: TableBrief) -> TableArgs: ...

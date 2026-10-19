@@ -15,6 +15,8 @@ from camp_agent.llm.llm_types import (
     GuideAnswer,
     SameProblem,
     SplitOutput,
+    TableArgs,
+    TableBrief,
     TicketArgs,
     TicketBrief,
     Verdict,
@@ -34,6 +36,7 @@ class PydanticAiLlm:
             team: self._agent(model, TicketArgs, instructions, settings)
             for team, instructions in llm_prompts.SPECIALISTS.items()
         }
+        self._restaurant = self._agent(model, TableArgs, llm_prompts.RESTAURANT, settings)
 
     async def verify(self, text: str) -> Verdict:
         return (await self._run(self._verify, text)).verdict
@@ -52,6 +55,9 @@ class PydanticAiLlm:
 
     async def draft_ticket(self, team: Team, brief: TicketBrief) -> TicketArgs:
         return await self._run(self._specialists[team], llm_prompts.ticket_input(brief))
+
+    async def draft_table(self, brief: TableBrief) -> TableArgs:
+        return await self._run(self._restaurant, llm_prompts.table_input(brief))
 
     async def _run[T: BaseModel](self, agent: Agent[None, T], prompt: str) -> T:
         try:

@@ -12,10 +12,11 @@ from camp_agent.domain.cabin_reports import ReportDraft
 from camp_agent.domain.case_state import CaseState, StateReason
 from camp_agent.domain.fault_flow import FaultTask, next_actionable, split_to_confirm
 from camp_agent.domain.route_guard import TaskState
-from camp_agent.domain.scope import Scope
 from camp_agent.domain.specialist import specialist_for
+from camp_agent.graph.task_steps import hold_task, required_scope
 from camp_agent.graph.triage_state import (
     CONFIRM_SPLIT,
+    DISPATCH,
     LINK,
     REPORT,
     SAME,
@@ -27,6 +28,7 @@ from camp_agent.graph.triage_store import TriageStore
 from camp_agent.graph.triage_types import (
     CaseSnapshot,
     StepRecord,
+    TaskHold,
     TaskTransition,
     TicketLink,
     ValidationRecord,
@@ -57,16 +59,13 @@ class FaultDesk:
         self._tickets = tickets
         self._clock = clock
 
-    async def route(self, case_id: int) -> TriageUpdate:
-        case = await self._store.load(case_id)
-        if case.status.state is CaseState.PARKED:
-            return {"next": END}
+    async def next_step(self, case_id: int) -> TriageUpdate | None:
         faults = await self._store.faults(case_id)
         if split_to_confirm(faults):
             return {"next": CONFIRM_SPLIT}
         fault = next_actionable(faults)
         if fault is None:
-            return {"next": END}
+            return None
         return {
             "next": _STEP_FOR[fault.state],
             "fault": fault.step_id,
@@ -84,11 +83,11 @@ class FaultDesk:
             )
             audit = AuditEntry(CONFIRM_SPLIT, "asked", {"step_ids": steps})
             await self._store.commit(case_id, StepRecord(audit, transitions=moves))
-        return await self.route(case_id)
+        return {"next": DISPATCH}
 
     async def report(self, state: TriageState) -> TriageUpdate:
         fault = await self._fault(state)
-        scope = _scope(await self._store.load(state["case_id"]))
+        scope = required_scope(await self._store.load(state["case_id"]))
         draft = ReportDraft(
             scope.cabin, fault.fault_type, fault.step_id, fault.summary, self._clock.now()
         )
@@ -121,7 +120,7 @@ class FaultDesk:
             fault.step_id, TaskState.AWAITING_SAME, fault.state, same_report_id=proposed.report_id
         )
         await self._commit(state, AuditEntry(SAME, "maybe", detail), transitions=(move,))
-        return await self.route(state["case_id"])
+        return {"next": DISPATCH}
 
     async def specialist(self, state: TriageState) -> TriageUpdate:
         case = await self._store.load(state["case_id"])
@@ -130,7 +129,7 @@ class FaultDesk:
         if case.status.state is CaseState.PARKED:
             await self._audit(state, AuditEntry(TICKET, "stopped_parked", detail))
             return {"next": END}
-        scope = _scope(case)
+        scope = required_scope(case)
         team = specialist_for(fault.category)
         if team is None:
             audit = AuditEntry(VALIDATE, "no_specialist", detail)
@@ -184,7 +183,7 @@ class FaultDesk:
         if receipt is None:
             audit = AuditEntry(TICKET, "held", detail)
             return await self._hold(state, fault, StateReason.TICKETING_DOWN, audit, None, record)
-        return await self.route(state["case_id"])
+        return {"next": DISPATCH}
 
     async def link(self, state: TriageState) -> TriageUpdate:
         case = await self._store.load(state["case_id"])
@@ -195,7 +194,7 @@ class FaultDesk:
             return {"next": END}
         if fault.same_report_id is None:
             raise RuntimeError("link ran without a report to link to")
-        scope = _scope(case)
+        scope = required_scope(case)
         target = await self._store.link_target(fault.same_report_id)
         if target is None:
             raise RuntimeError("the report to link to does not exist")
@@ -204,7 +203,7 @@ class FaultDesk:
         if check.decision is LinkDecision.NEW_TICKET:
             move = TaskTransition(fault.step_id, TaskState.DRAFTING, fault.state)
             await self._commit(state, AuditEntry(LINK, "new_ticket", detail), transitions=(move,))
-            return await self.route(state["case_id"])
+            return {"next": DISPATCH}
         args = {"link": target.ticket_ref or "", "cabin": target.cabin or ""}
         if check.decision is LinkDecision.HOLD:
             record = ValidationRecord(fault.step_id, ValidationOutcome.BLOCK, args)
@@ -221,7 +220,7 @@ class FaultDesk:
         await self._commit(
             state, AuditEntry(LINK, "linked", detail), case, transitions=(move,), validation=record
         )
-        return await self.route(state["case_id"])
+        return {"next": DISPATCH}
 
     async def _hold(
         self,
@@ -232,13 +231,9 @@ class FaultDesk:
         case: CaseSnapshot | None = None,
         record: ValidationRecord | None = None,
     ) -> TriageUpdate:
-        # The task leaves the actionable states, so no later run retries it on its own.
-        case = case or await self._store.load(state["case_id"])
-        status = case.status.hold(reason, self._clock.now())
-        move = TaskTransition(fault.step_id, TaskState.HELD, fault.state)
-        step = StepRecord(audit, case.change(status), transitions=(move,), validation=record)
-        await self._store.commit(state["case_id"], step)
-        return await self.route(state["case_id"])
+        hold = TaskHold(fault.step_id, fault.state, reason, audit, record)
+        await hold_task(self._store, state["case_id"], hold, self._clock.now(), case)
+        return {"next": DISPATCH}
 
     async def _commit(
         self,
@@ -260,10 +255,3 @@ class FaultDesk:
             if fault.step_id == state["fault"]:
                 return fault
         raise RuntimeError(f"no fault task {state['fault']}")
-
-
-def _scope(case: CaseSnapshot) -> Scope:
-    # A fault reaches the desk only once the route guard saw a scope (D19).
-    if case.scope is None:
-        raise RuntimeError("a fault task without a scope reached the fault desk")
-    return case.scope

@@ -4,6 +4,7 @@ from typing import Protocol
 from camp_agent.domain.cabin_reports import ReportDraft, SavedReport
 from camp_agent.domain.fault_flow import FaultTask
 from camp_agent.domain.route_guard import TaskState
+from camp_agent.domain.table_flow import TableTask
 from camp_agent.graph.triage_types import CaseSnapshot, LinkTarget, StepRecord, WaitingTask
 
 
@@ -19,6 +20,8 @@ class TriageStore(Protocol):
     async def awaiting_scope(self, case_id: int) -> list[WaitingTask]: ...
 
     async def faults(self, case_id: int) -> list[FaultTask]: ...
+
+    async def tables(self, case_id: int) -> list[TableTask]: ...
 
     async def task_states(self, case_id: int) -> list[TaskState]: ...
 

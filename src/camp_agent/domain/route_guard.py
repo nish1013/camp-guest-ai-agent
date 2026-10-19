@@ -44,6 +44,7 @@ class TaskState(StrEnum):
     DRAFTING = "drafting"
     LINKING = "linking"
     TICKETED = "ticketed"
+    BOOKING_REQUESTED = "booking_requested"
 
 
 @dataclass(frozen=True)
