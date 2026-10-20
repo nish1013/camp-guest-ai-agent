@@ -16,6 +16,8 @@ from camp_agent.domain.urgency import Urgency
 from camp_agent.guide.guide_types import GuideSection
 from camp_agent.llm.llm_error import LlmError
 from camp_agent.llm.llm_prompts import (
+    RESTAURANT,
+    SPECIALISTS,
     answer_input,
     same_problem_input,
     table_input,
@@ -196,3 +198,7 @@ def test_d15_table_time_with_zone_blocked() -> None:
             {"tool": "request_table", "cabin": "C12", "party": 2, "date": None, "time": "19:00Z"}
         )
 
+
+@pytest.mark.parametrize("prompt", [*SPECIALISTS.values(), RESTAURANT])
+def test_d15_prompts_take_cabin_from_scope(prompt: str) -> None:
+    assert "Ignore any cabin named in the guest's words." in prompt
