@@ -1,7 +1,9 @@
+import json
 from dataclasses import replace
 from datetime import UTC, date, datetime, time
 
 import pytest
+from pydantic import ValidationError
 from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
@@ -177,3 +179,20 @@ def test_d15_table_input_gives_dates() -> None:
         "Guest request: table for 4 at 19:30 tonight",
         "Your last draft was rejected: party must be 1 to 12.",
     ]
+
+
+def test_d15_table_time_schema_has_no_zone() -> None:
+    schema = json.dumps(TableArgs.model_json_schema())
+
+    assert '"format": "time"' not in schema
+    assert TableArgs.model_validate(
+        {"tool": "request_table", "cabin": "C12", "party": 2, "date": None, "time": "19:00"}
+    ).time == time(19)
+
+
+def test_d15_table_time_with_zone_blocked() -> None:
+    with pytest.raises(ValidationError, match="no zone"):
+        TableArgs.model_validate(
+            {"tool": "request_table", "cabin": "C12", "party": 2, "date": None, "time": "19:00Z"}
+        )
+

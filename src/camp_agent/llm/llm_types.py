@@ -1,8 +1,9 @@
 import datetime as dt
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Annotated
 
-from pydantic import BaseModel
+from pydantic import AfterValidator, BaseModel, WithJsonSchema
 
 from camp_agent.domain.fault_type import FaultType
 from camp_agent.domain.route_guard import Category, Route
@@ -52,12 +53,33 @@ class TicketBrief:
     rejected_for: tuple[str, ...] = ()
 
 
+def _camp_clock(value: dt.time | None) -> dt.time | None:
+    if value is not None and value.tzinfo is not None:
+        raise ValueError("time must be HH:MM on the camp clock, with no zone")
+    return value
+
+
+# The default schema is RFC 3339 format "time", which requires a zone, so the model adds "Z".
+type CampClockTime = Annotated[
+    dt.time | None,
+    AfterValidator(_camp_clock),
+    WithJsonSchema(
+        {
+            "anyOf": [
+                {"type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"},
+                {"type": "null"},
+            ]
+        }
+    ),
+]
+
+
 class TableArgs(BaseModel):
     tool: str
     cabin: str
     party: int | None
     date: dt.date | None
-    time: dt.time | None
+    time: CampClockTime
 
 
 @dataclass(frozen=True)
