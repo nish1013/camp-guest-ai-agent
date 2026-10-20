@@ -59,7 +59,7 @@ A real camp prints this link as a QR code in each cabin. The link is signed with
 
 ### 5. Staff update the ticket
 
-1. Open <http://localhost:8000/staff/login>. Log in with `staff` and `demo-only-change-me`.
+1. Open <http://localhost:8000/staff/login>. Log in with `staff` and `demo-only-set-STAFF_PASSWORD`.
 2. The queue shows both C12 cases.
 3. Open one case. Set ticket `T1` to `in_progress`.
 4. Within 5 seconds, both guest pages show "Maintenance is working on it". You do not reload the page.
