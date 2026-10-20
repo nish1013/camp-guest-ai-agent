@@ -186,3 +186,7 @@ CI runs `make lint`, `make test` and `make test-int`.
 | [`docs/architecture.md`](docs/architecture.md) | the diagrams |
 | [`docs/plan.md`](docs/plan.md) | the locked plan |
 | [`docs/plan-deviations.md`](docs/plan-deviations.md) | where the build differs from the plan |
+
+## License
+
+MIT. See [`LICENSE`](LICENSE).
