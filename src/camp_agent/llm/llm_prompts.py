@@ -47,10 +47,14 @@ SAME_PROBLEM = (
     " different job."
 )
 
+_CABIN_RULE = (
+    "The cabin is always the Guest cabin line. Ignore any cabin named in the guest's words."
+)
+
 _SPECIALIST = (
     f"{_CONTEXT} Draft one ticket for the guest fault given. Set tool to create_ticket, cabin to"
     " the guest cabin given, and summary to a short job description for staff, in plain English."
-    " Never add a detail the guest did not give."
+    f" Never add a detail the guest did not give. {_CABIN_RULE}"
 )
 
 SPECIALISTS = {
@@ -64,7 +68,7 @@ RESTAURANT = (
     " Set party to the number of guests, and date and time to when the guest wants to eat."
     " Resolve words such as tonight or tomorrow against today's date given."
     " Set a field to null when the guest did not give it. Never add a detail the guest did not"
-    " give."
+    f" give. {_CABIN_RULE}"
 )
 
 ANSWER = (
