@@ -1,4 +1,4 @@
-.PHONY: lint format test test-int evals
+.PHONY: lint format test test-int evals e2e
 
 lint:
 	uv run ruff format --check .
@@ -17,3 +17,7 @@ test-int:
 
 evals:
 	uv run python -m tests.evals.run_evals
+
+e2e:
+	uv run playwright install chromium
+	uv run pytest tests/e2e
