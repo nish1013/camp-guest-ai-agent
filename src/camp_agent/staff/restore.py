@@ -25,14 +25,8 @@ class RestoreCommand:
 
 
 RESTORE = "restore"
-
-
 NO_BOOKING = "No booking with that reference."
-
-
 NEEDS_BOOKING = "A case parked after failed verification needs the booking reference."
-
-
 HAS_SCOPE = "This case already has a cabin and stay."
 
 

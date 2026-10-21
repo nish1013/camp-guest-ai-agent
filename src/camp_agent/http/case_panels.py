@@ -22,14 +22,10 @@ from camp_agent.intake.case_view import (
 from camp_agent.intake.step_up import StepUpForm
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
-
-
 templates.env.globals["picks"] = list(QuickPick)
 
 
 STATUS = "status"
-
-
 ACTIONS = "actions"
 
 

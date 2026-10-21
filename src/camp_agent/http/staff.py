@@ -22,8 +22,6 @@ from camp_agent.stay.port import StayError
 from camp_agent.ticket.demo_tickets import DemoTicketStatus
 
 STAFF_SESSION_KEY = "staff"
-
-
 LOGIN_PATH = "/staff/login"
 
 
@@ -41,23 +39,12 @@ def require_staff(request: Request) -> None:
 
 
 QUEUE_PATH = "/staff/cases"
-
-
 LOGIN_REFUSED = "Wrong user name or password."
-
-
 CASE_CHANGED = "This case changed since you opened it. It has been reloaded."
-
-
 BOOKINGS_DOWN = "The booking system cannot be reached. Try again shortly."
 
-
 Version = Annotated[int, Form(ge=0)]
-
-
 BookingRef = Annotated[str, Form(max_length=40)]
-
-
 StepId = Annotated[str | None, Form(pattern=r"^m\d+/(t\d+|emergency)$", max_length=40)]
 
 
@@ -76,11 +63,7 @@ class StaffServices:
 
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
-
-
 router = APIRouter(prefix="/staff")
-
-
 guarded = APIRouter(dependencies=[Depends(require_staff)])
 
 

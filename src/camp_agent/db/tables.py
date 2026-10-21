@@ -17,7 +17,6 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 metadata = MetaData()
 
-
 cases = Table(
     "cases",
     metadata,
@@ -40,7 +39,6 @@ cases = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
 
-
 messages = Table(
     "messages",
     metadata,
@@ -54,7 +52,6 @@ messages = Table(
     Column("restored", Boolean, nullable=False),
     Column("pick", Text),
 )
-
 
 tasks = Table(
     "tasks",
@@ -81,7 +78,6 @@ tasks = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
 
-
 reports = Table(
     "reports",
     metadata,
@@ -95,7 +91,6 @@ reports = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
 
-
 validation_records = Table(
     "validation_records",
     metadata,
@@ -106,7 +101,6 @@ validation_records = Table(
     Column("args", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
-
 
 demo_tickets = Table(
     "demo_tickets",
@@ -124,7 +118,6 @@ demo_tickets = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
 
-
 audit_entries = Table(
     "audit_entries",
     metadata,
@@ -136,7 +129,6 @@ audit_entries = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
 
-
 verification_attempts = Table(
     "verification_attempts",
     metadata,
@@ -146,7 +138,6 @@ verification_attempts = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
 
-
 ip_verification_failures = Table(
     "ip_verification_failures",
     metadata,
@@ -154,7 +145,6 @@ ip_verification_failures = Table(
     Column("ip", Text, nullable=False),
     Column("failed_at", DateTime(timezone=True), nullable=False),
 )
-
 
 ticket_events = Table(
     "ticket_events",
@@ -165,7 +155,6 @@ ticket_events = Table(
     Column("version", Integer, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
-
 
 status_notices = Table(
     "status_notices",

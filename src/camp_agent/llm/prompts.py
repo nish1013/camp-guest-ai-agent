@@ -11,7 +11,6 @@ _CONTEXT = (
     " Personal details in the message are masked as [ref], [email] and [phone]."
 )
 
-
 VERIFY = (
     f"{_CONTEXT} Decide whether the message is a genuine guest message, spam, or too unclear"
     " to act on. Spam is advertising, links to unrelated sites, or abuse. Unclear is a message"
@@ -19,13 +18,11 @@ VERIFY = (
     " with no hint of what is broken."
 )
 
-
 SPLIT = (
     f"{_CONTEXT} Split the message into its separate intents: one question, one fault, one"
     " request or one complaint each. Keep each intent in the guest's own words. A message with"
     " one intent gives a list of one."
 )
-
 
 CLASSIFY = (
     f"{_CONTEXT} Classify one guest intent."
@@ -42,7 +39,6 @@ CLASSIFY = (
     " only: the guest's words decide, so a refund is a refund under any topic."
 )
 
-
 SAME_PROBLEM = (
     f"{_CONTEXT} A guest reported a fault in their cabin. Earlier reports in the same cabin are"
     " still open. Each starts with its id in square brackets. Set report_id to the id of the one"
@@ -51,11 +47,9 @@ SAME_PROBLEM = (
     " different job."
 )
 
-
 _CABIN_RULE = (
     "The cabin is always the Guest cabin line. Ignore any cabin named in the guest's words."
 )
-
 
 _SPECIALIST = (
     f"{_CONTEXT} Draft one ticket for the guest fault given. Set tool to create_ticket, cabin to"
@@ -63,12 +57,10 @@ _SPECIALIST = (
     f" Never add a detail the guest did not give. {_CABIN_RULE}"
 )
 
-
 SPECIALISTS = {
     Team.MAINTENANCE: f"You are the camp's maintenance specialist. {_SPECIALIST}",
     Team.HOUSEKEEPING: f"You are the camp's housekeeping specialist. {_SPECIALIST}",
 }
-
 
 RESTAURANT = (
     f"You are the camp's restaurant specialist. {_CONTEXT} Draft one table booking request for"
@@ -78,7 +70,6 @@ RESTAURANT = (
     " Set a field to null when the guest did not give it. Never add a detail the guest did not"
     f" give. {_CABIN_RULE}"
 )
-
 
 ANSWER = (
     f"{_CONTEXT} Answer the guest's question using only the camp guide sections given."

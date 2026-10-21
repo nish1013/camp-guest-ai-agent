@@ -14,14 +14,8 @@ class SafetyRule:
 
 
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
-
-
 _BOOKING_REF = re.compile(r"\bBK[-\s]?\d{4,}\b", re.IGNORECASE)
-
-
 _PHONE = re.compile(r"(?<!\w)\+?\(?\d[\d\s().-]{7,}\d")
-
-
 _PHONE_MIN_DIGITS = 9
 
 

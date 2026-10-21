@@ -32,40 +32,19 @@ from camp_agent.intake.step_up import StepUpCommand, StepUpResult, SubmitStepUp
 from camp_agent.qr.qr_token import QrOutcome, QrTokens
 
 CASE_COOKIE = "case_token"
-
-
 QR_SESSION_KEY = "qr_token"
-
-
 QR_INVALID_KEY = "qr_invalid"
-
-
 CABIN_HINT_KEY = "cabin_hint"
-
-
 RATE_LIMITED_REPLY = "Please try again in a few minutes"
-
 
 MessageText = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)
 ]
-
-
 CabinHint = Annotated[str, StringConstraints(strip_whitespace=True, max_length=16)]
-
-
 Surname = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
-
-
 BookingRef = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]
-
-
 Subject = Annotated[str, StringConstraints(pattern=r"^m\d+(/t\d+)?$", max_length=40)]
-
-
 CaseToken = Annotated[str, StringConstraints(min_length=1, max_length=64)]
-
-
 Target = Literal["case", "new"]
 
 
@@ -90,8 +69,6 @@ class GuestServices:
 
 
 log = logging.getLogger(__name__)
-
-
 router = APIRouter()
 
 

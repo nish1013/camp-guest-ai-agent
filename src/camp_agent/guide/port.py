@@ -27,8 +27,6 @@ class GuidePort(Protocol):
 
 
 EMERGENCY_SECTION = "emergency"
-
-
 RECEPTION_SECTION = "reception"
 
 

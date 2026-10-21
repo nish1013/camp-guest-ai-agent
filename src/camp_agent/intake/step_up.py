@@ -68,19 +68,10 @@ class StepUpForm:
 
 
 STEP_UP = "step_up"
-
-
 PARKED = "parked"
-
-
 FAILED = "failed"
-
-
 IP_LIMIT: dict[str, AuditValue] = {"check": "ip_limit"}
-
-
 _CONFLICT_ATTEMPTS = 5
-
 
 log = logging.getLogger(__name__)
 

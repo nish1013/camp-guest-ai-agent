@@ -77,8 +77,6 @@ class SlidingWindowLimiter:
 
 
 INVALID_QR = AuditEntry("qr_scope", "invalid_token")
-
-
 REOPENED = AuditEntry("case", "reopened")
 
 

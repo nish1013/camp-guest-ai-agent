@@ -23,11 +23,7 @@ from camp_agent.graph.triage import (
 from camp_agent.llm.port import LlmError, LlmPort, TableBrief
 
 VALIDATE = "validate"
-
-
 RESTAURANT = "restaurant"
-
-
 # One draft and one reprompt, then a person decides (D15).
 _MAX_DRAFTS = 2
 
