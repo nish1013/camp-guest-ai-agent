@@ -1,12 +1,9 @@
 from collections.abc import AsyncIterator, Iterator
 
 import pytest
-from alembic import command
-from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, create_engine, text
+from sqlalchemy import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-from testcontainers.community.postgres import PostgresContainer
 
 from camp_agent.app import create_app
 from camp_agent.config import Settings
@@ -21,34 +18,6 @@ from tests.fakes import (
     oct_19,
 )
 from tests.integration.intake_support import SECRET, RecordingGraph
-
-
-@pytest.fixture(scope="session")
-def database_url() -> Iterator[str]:
-    with PostgresContainer("postgres:16-alpine", driver="psycopg") as pg:
-        yield pg.get_connection_url()
-
-
-@pytest.fixture(scope="session")
-def migrated_url(database_url: str) -> str:
-    config = Config("alembic.ini")
-    config.set_main_option("sqlalchemy.url", database_url)
-    command.upgrade(config, "head")
-    return database_url
-
-
-@pytest.fixture
-def db(migrated_url: str) -> Iterator[Engine]:
-    engine = create_engine(migrated_url)
-    with engine.begin() as conn:
-        conn.execute(
-            text(
-                "TRUNCATE messages, cases, ip_verification_failures, demo_tickets, ticket_events"
-                " RESTART IDENTITY CASCADE"
-            )
-        )
-    yield engine
-    engine.dispose()
 
 
 @pytest.fixture

@@ -120,8 +120,6 @@ class CaseStatus:
 
 
 _ACTED = frozenset({TaskState.TICKETED, TaskState.BOOKING_REQUESTED})
-
-
 _ASKING = frozenset({TaskState.AWAITING_SCOPE, TaskState.AWAITING_SPLIT, TaskState.AWAITING_SAME})
 
 

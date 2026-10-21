@@ -195,50 +195,20 @@ def next_batch(pending: list[PendingMessage]) -> list[PendingMessage]:
 
 
 SAFETY = "safety"
-
-
 VERIFY = "verify"
-
-
 PARK = "park"
-
-
 CLARIFY = "clarify"
-
-
 SPLIT = "split"
-
-
 CLASSIFY = "classify"
-
-
 ROUTE_GUARD = "route_guard"
-
-
 ANSWER = "answer"
-
-
 LLM_FAILED = "llm_failed"
-
-
 CONFIRM_SPLIT = "confirm_split"
-
-
 REPORT = "report"
-
-
 SAME = "same"
-
-
 SPECIALIST = "specialist"
-
-
 LINK = "link"
-
-
 BOOKING = "booking"
-
-
 DISPATCH = "dispatch"
 
 

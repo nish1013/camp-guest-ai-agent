@@ -16,11 +16,7 @@ from camp_agent.graph.triage import LinkTarget
 
 # First key of the two-key advisory lock: keeps cabin locks apart from any other lock.
 _CABIN_LOCK = 4
-
-
 _TASK = and_(tasks.c.case_id == reports.c.case_id, tasks.c.step_id == reports.c.step_id)
-
-
 _OPEN: ColumnElement[bool] = or_(
     tasks.c.ticket_status.is_(None), tasks.c.ticket_status.not_in(CLOSED_TICKET_STATES)
 )

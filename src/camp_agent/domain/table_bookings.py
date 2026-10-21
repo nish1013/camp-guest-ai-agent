@@ -5,8 +5,6 @@ from datetime import date, time
 from camp_agent.domain.routing import TaskState
 
 TO_BOOK = frozenset({TaskState.QUEUED})
-
-
 REQUESTED = frozenset(
     {TaskState.BOOKING_REQUESTED, TaskState.BOOKING_CONFIRMED, TaskState.BOOKING_DECLINED}
 )

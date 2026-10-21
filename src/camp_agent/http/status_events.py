@@ -6,7 +6,6 @@ import anyio
 
 type RenderParts = Callable[[], Awaitable[Mapping[str, str] | None]]
 
-
 RETRY_MS = 3000
 
 

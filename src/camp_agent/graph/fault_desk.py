@@ -33,15 +33,9 @@ from camp_agent.llm.port import LlmError, LlmPort, TicketBrief
 from camp_agent.ticket.port import TicketError, TicketKey, TicketPort, TicketReceipt, TicketRequest
 
 VALIDATE = "validate"
-
-
 TICKET = "ticket"
-
-
 # One draft and one reprompt, then a person decides (D15).
 _MAX_DRAFTS = 2
-
-
 _STEP_FOR = {
     TaskState.QUEUED: REPORT,
     TaskState.SPLIT_CONFIRMED: REPORT,

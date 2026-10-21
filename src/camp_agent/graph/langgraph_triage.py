@@ -55,11 +55,7 @@ from camp_agent.llm.port import LlmError, LlmPort, Verdict
 from camp_agent.ticket.port import TicketPort
 
 _AFTER_VERDICT = {Verdict.GENUINE: SPLIT, Verdict.SPAM: PARK, Verdict.UNCLEAR: CLARIFY}
-
-
 _RECURSION_LIMIT = 1000
-
-
 # A step-up or staff action changed the case between a node's read and its write: read again.
 _STALE_RETRY = RetryPolicy(initial_interval=0.01, max_attempts=5, retry_on=StaleCaseError)
 

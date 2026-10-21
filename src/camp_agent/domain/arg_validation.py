@@ -7,14 +7,8 @@ from camp_agent.domain.routing import Scope
 from camp_agent.domain.table_bookings import TableBooking
 
 CREATE_TICKET = "create_ticket"
-
-
 REQUEST_TABLE = "request_table"
-
-
 SUMMARY_MAX = 200
-
-
 PARTY_MAX = 12
 
 

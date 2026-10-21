@@ -51,8 +51,6 @@ class SavedReport:
 
 
 TO_REPORT = frozenset({TaskState.QUEUED, TaskState.SPLIT_CONFIRMED})
-
-
 ACTIONABLE = TO_REPORT | {TaskState.DRAFTING, TaskState.LINKING}
 
 

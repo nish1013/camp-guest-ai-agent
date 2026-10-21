@@ -68,14 +68,14 @@ A real camp prints this link as a QR code in each cabin. The link is signed with
 ### 3. Report a fault
 
 1. Send "There is no hot water in our shower".
-2. The status shows "Logged with maintenance". The demo ticket system now holds ticket `T1`.
+2. The ticket line shows "Logged with maintenance". The demo ticket system now holds ticket `T1`.
 
 ### 4. A second guest reports the same fault
 
 1. Open the QR link from step 1 in a private window. This is a second guest in C12.
 2. Send "The shower water is cold, no hot water at all".
 3. The page asks "Same problem as the 20:05 hot water report?". The time is the time of step 3. Click "Yes".
-4. The status shows "Logged with maintenance". The case joins ticket `T1`. No second ticket is created.
+4. The ticket line shows "Logged with maintenance". The case joins ticket `T1`. No second ticket is created.
 
 ### 5. Staff update the ticket
 
@@ -88,7 +88,7 @@ A real camp prints this link as a QR code in each cabin. The link is signed with
 ### 6. Book a table
 
 1. On the first guest page, send "Can we book a table for 4 tomorrow at 19:30?".
-2. The status shows "Waiting for the restaurant to confirm". The page never shows "Booked" before staff confirm.
+2. The booking line shows "Waiting for the restaurant to confirm". The page never shows "Booked" before staff confirm.
 3. In the staff view, open the case and click "Confirm".
 4. The guest page shows "Booked: table for 4 at 19:30".
 
@@ -98,7 +98,7 @@ A real camp prints this link as a QR code in each cabin. The link is signed with
 2. Send "The bathroom light in our cabin is broken".
 3. The page asks for the booking surname and reference.
 4. Enter `Wrong` and `BK-48213`. The page shows "We could not find a booking with those details."
-5. Enter `Müller` and `BK-48213`. The status shows "Logged with maintenance".
+5. Enter `Müller` and `BK-48213`. The ticket line shows "Logged with maintenance".
 
 After 3 failed attempts, the case is parked for staff. The surname and the reference never go to the LLM or the audit.
 
@@ -192,6 +192,7 @@ make lint           ruff format check, ruff, mypy --strict
 make test           unit tests, fake ports, no network
 make test-int       Postgres through testcontainers, demo adapters
 make evals          LLM evals, needs OPENAI_API_KEY, run by hand only
+make e2e            browser tests in Chromium, fake LLM, run by hand only
 ```
 
 CI runs `make lint`, `make test` and `make test-int`.
