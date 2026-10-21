@@ -4,11 +4,9 @@ import logging
 from markupsafe import Markup
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from camp_agent.db.case_repository import CaseRepository
-from camp_agent.db.status_notice_repository import StatusNoticeRepository
+from camp_agent.db.cases import CaseRepository, StatusNoticeRepository
 from camp_agent.http.case_panels import STATUS, CasePanels
-from camp_agent.notification.notification_port import NotificationPort
-from camp_agent.notification.notification_types import StatusNotice
+from camp_agent.notification.port import NotificationPort, StatusNotice
 
 log = logging.getLogger(__name__)
 

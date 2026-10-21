@@ -5,7 +5,7 @@ from sqlalchemy import Engine, text
 from sqlalchemy.exc import IntegrityError
 
 from camp_agent.domain.citation_check import GUIDE_DOWN, NO_INFORMATION
-from camp_agent.llm.llm_types import GuideAnswer
+from camp_agent.llm.port import GuideAnswer
 from tests.fakes import FakeLlm, SwitchableGuide, demo_section
 from tests.integration.intake_support import audit, rows, send
 

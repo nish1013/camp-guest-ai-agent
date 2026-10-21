@@ -1,7 +1,7 @@
 import json
 import logging
 
-from camp_agent.notification.notification_types import StatusNotice
+from camp_agent.notification.port import StatusNotice
 
 log = logging.getLogger(__name__)
 

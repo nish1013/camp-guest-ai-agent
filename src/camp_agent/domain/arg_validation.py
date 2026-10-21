@@ -2,13 +2,19 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 from enum import StrEnum
 
-from camp_agent.domain.scope import Scope
-from camp_agent.domain.table_flow import TableBooking
-from camp_agent.domain.ticket_status import CLOSED_TICKET_STATES, TicketStatus
+from camp_agent.domain.faults import CLOSED_TICKET_STATES, TicketStatus
+from camp_agent.domain.routing import Scope
+from camp_agent.domain.table_bookings import TableBooking
 
 CREATE_TICKET = "create_ticket"
+
+
 REQUEST_TABLE = "request_table"
+
+
 SUMMARY_MAX = 200
+
+
 PARTY_MAX = 12
 
 

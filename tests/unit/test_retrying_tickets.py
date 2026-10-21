@@ -1,12 +1,9 @@
 import pytest
 
-from camp_agent.domain.fault_type import FaultType
-from camp_agent.domain.specialist import Team
-from camp_agent.domain.ticket_status import TicketStatus
-from camp_agent.domain.urgency import Urgency
+from camp_agent.domain.faults import FaultType, TicketStatus
+from camp_agent.domain.routing import Team, Urgency
+from camp_agent.ticket.port import TicketError, TicketKey, TicketReceipt, TicketRequest
 from camp_agent.ticket.retrying_tickets import RetryingTickets
-from camp_agent.ticket.ticket_error import TicketError
-from camp_agent.ticket.ticket_types import TicketKey, TicketReceipt, TicketRequest
 
 pytestmark = pytest.mark.anyio
 

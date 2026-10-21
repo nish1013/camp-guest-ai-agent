@@ -1,10 +1,10 @@
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from enum import StrEnum
 
 from itsdangerous import BadSignature, URLSafeSerializer
 
-from camp_agent.domain.scope import Scope, ScopeSource
+from camp_agent.domain.routing import Scope, ScopeSource
 
 
 class QrOutcome(StrEnum):
@@ -43,3 +43,8 @@ class QrTokens:
         if not payload["c"] or stay_from > stay_to:
             raise ValueError("malformed scope")
         return Scope(payload["c"], stay_from, stay_to, ScopeSource.QR)
+
+
+def demo_link(tokens: QrTokens, base_url: str, cabin: str, today: date, nights: int) -> str:
+    token = tokens.issue(cabin, today, today + timedelta(days=nights))
+    return f"{base_url.rstrip('/')}/q/{token}"

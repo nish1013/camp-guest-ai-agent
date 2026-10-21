@@ -3,7 +3,7 @@
 One Python app: FastAPI serves a phone-first web UI and runs a LangGraph triage graph over ports.
 Docker Compose runs it with Postgres and demo adapters. One OpenAI API key is the only secret.
 
-Status: locked, 2026-10-19. Amended 2026-10-19 (A1).
+Status: locked, 2026-10-19. Amended 2026-10-19 (A1), 2026-10-21 (A2).
 
 ## Context
 
@@ -169,6 +169,9 @@ Each PR is from fresh `main` and green in CI before the next starts.
 11. **`docs/readme`**: README with the demo walk-through and how to write a real adapter.
     **Accept when:** a clean clone, `cp .env.example .env`, a key, and `docker compose up` run the
     walk-through with no other step.
+12. **`refactor/python-module-per-area`**: one module per feature area, not one class per file (A2).
+    **Accept when:** each top-level definition has the same source before and after; `make lint`,
+    `make test` and `make test-int` pass.
 
 ## Verification
 
@@ -187,6 +190,7 @@ Changes made after the lock. Each one is dated and names the decision it carries
 | Id | Date | Change | Decision | Why |
 | --- | --- | --- | --- | --- |
 | A1 | 2026-10-19 | PR 9 adds the "Add to C12 or new request?" prompt and the quick picks. | D4 (amended), D51 | A spam verdict on a follow-up parked a case with an open ticket, against I8. Found in the PR 6 build. |
+| A2 | 2026-10-21 | PR 12 moves the code into one module per feature area. A layer keeps its packages. Each adapter package has one `port.py` with the protocol, its types and its error. | — | Code that changes together is in one module, so cohesion is better. 128 modules became 58. Behaviour does not change. |
 
 ## Deviations
 

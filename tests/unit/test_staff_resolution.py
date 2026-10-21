@@ -2,9 +2,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from camp_agent.domain.case_state import CaseState, StateReason
-from camp_agent.domain.case_status import CaseStatus
-from camp_agent.domain.route_guard import Category, TaskKind, TaskState
+from camp_agent.domain.cases import CaseState, CaseStatus, StateReason
+from camp_agent.domain.routing import Category, TaskKind, TaskState
 from camp_agent.domain.staff_resolution import approved_state, edit_errors
 
 NOW = datetime(2026, 10, 19, 14, tzinfo=UTC)

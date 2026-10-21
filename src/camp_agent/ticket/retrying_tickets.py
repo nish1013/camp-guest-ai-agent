@@ -1,8 +1,6 @@
 import anyio
 
-from camp_agent.ticket.ticket_error import TicketError
-from camp_agent.ticket.ticket_port import TicketPort
-from camp_agent.ticket.ticket_types import TicketReceipt, TicketRequest
+from camp_agent.ticket.port import TicketError, TicketPort, TicketReceipt, TicketRequest
 
 
 class RetryingTickets:

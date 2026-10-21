@@ -2,14 +2,12 @@ from collections.abc import Sequence
 
 import pytest
 
-from camp_agent.domain.case_state import CaseState, StateReason
+from camp_agent.domain.cases import CaseState, StateReason
 from camp_agent.domain.citation_check import GUIDE_DOWN, NO_INFORMATION
-from camp_agent.domain.route_guard import Category, Route, TaskKind
-from camp_agent.domain.urgency import Urgency
-from camp_agent.graph.triage_types import TaskAnswer
-from camp_agent.guide.guide_types import GuideSection
-from camp_agent.llm.llm_error import LlmError
-from camp_agent.llm.llm_types import GuideAnswer
+from camp_agent.domain.routing import Category, Route, TaskKind, Urgency
+from camp_agent.graph.triage import TaskAnswer
+from camp_agent.guide.port import GuideSection
+from camp_agent.llm.port import GuideAnswer, LlmError
 from tests.fakes import FakeLlm, demo_guide
 from tests.unit.triage_support import CASE, RECEPTION, new_store, proposal, steps, triage
 

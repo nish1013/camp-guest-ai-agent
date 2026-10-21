@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 
 from camp_agent.config import Settings
+from camp_agent.stay.port import StayError
 from camp_agent.stay.seed_stays import SeedStays, parse_stays
-from camp_agent.stay.stay_error import StayError
 from tests.fakes import FakeClock, oct_19
 
 pytestmark = pytest.mark.anyio

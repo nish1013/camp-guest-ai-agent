@@ -4,8 +4,8 @@ import pytest
 
 from camp_agent.domain.arg_validation import ValidationOutcome, check_table_args
 from camp_agent.domain.guest_status import table_line
-from camp_agent.domain.route_guard import TaskState
-from camp_agent.domain.table_flow import TableBooking, TableTask, next_to_book
+from camp_agent.domain.routing import TaskState
+from camp_agent.domain.table_bookings import TableBooking, TableTask, next_to_book
 from tests.fakes import CAMP_TZ
 from tests.unit.triage_support import C12
 

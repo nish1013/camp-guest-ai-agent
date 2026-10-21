@@ -132,11 +132,11 @@ The graph depends only on ports. Each port is a Python `Protocol`. Compose wires
 
 | Port | File | Demo adapter | The real adapter must |
 | --- | --- | --- | --- |
-| `TicketPort` | `src/camp_agent/ticket/ticket_port.py` | `DemoTickets`, a Postgres table | return the same ticket for a repeat `request.key`; raise `TicketError` when the ticket system is down |
-| `StayContextPort` | `src/camp_agent/stay/stay_port.py` | `SeedStays`, `data/stays.json` | find a booking by normalised reference; raise `StayError` when the booking system is down |
-| `GuidePort` | `src/camp_agent/guide/guide_port.py` | `MarkdownGuide`, `data/camp-guide.md` | return sections with stable ids; hold an `emergency` and a `reception` section; raise `GuideError` on a read failure |
-| `NotificationPort` | `src/camp_agent/notification/notification_port.py` | `LogNotifications`, one log line | send the status to the guest; store nothing that the page reads |
-| `LlmPort` | `src/camp_agent/llm/llm_port.py` | `PydanticAiLlm`, OpenAI | return the Pydantic models of `llm_types.py`; raise `LlmError` on a failure |
+| `TicketPort` | `src/camp_agent/ticket/port.py` | `DemoTickets`, a Postgres table | return the same ticket for a repeat `request.key`; raise `TicketError` when the ticket system is down |
+| `StayContextPort` | `src/camp_agent/stay/port.py` | `SeedStays`, `data/stays.json` | find a booking by normalised reference; raise `StayError` when the booking system is down |
+| `GuidePort` | `src/camp_agent/guide/port.py` | `MarkdownGuide`, `data/camp-guide.md` | return sections with stable ids; hold an `emergency` and a `reception` section; raise `GuideError` on a read failure |
+| `NotificationPort` | `src/camp_agent/notification/port.py` | `LogNotifications`, one log line | send the status to the guest; store nothing that the page reads |
+| `LlmPort` | `src/camp_agent/llm/port.py` | `PydanticAiLlm`, OpenAI | return the Pydantic models of `llm/port.py`; raise `LlmError` on a failure |
 
 ### Steps
 

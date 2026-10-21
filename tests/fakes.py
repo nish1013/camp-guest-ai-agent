@@ -5,24 +5,23 @@ from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from camp_agent.config import Settings
-from camp_agent.domain.audit_entry import AuditEntry
-from camp_agent.domain.cabin_reports import OpenReport, ReportDraft, SavedReport
-from camp_agent.domain.case_closure import TaskProgress, settled
-from camp_agent.domain.case_state import CaseState
-from camp_agent.domain.case_status import CaseStatus
-from camp_agent.domain.fault_flow import FaultTask
-from camp_agent.domain.fault_type import FaultType
-from camp_agent.domain.quick_pick import QuickPick
-from camp_agent.domain.route_guard import Category, Route, TaskKind, TaskState
-from camp_agent.domain.scope import Scope
-from camp_agent.domain.specialist import Team
-from camp_agent.domain.table_flow import TableBooking, TableTask
-from camp_agent.domain.ticket_status import CLOSED_TICKET_STATES, TicketStatus
-from camp_agent.domain.urgency import Urgency
-from camp_agent.graph.stale_case_error import StaleCaseError
-from camp_agent.graph.triage_types import (
+from camp_agent.domain.cases import AuditEntry, CaseState, CaseStatus, TaskProgress, settled
+from camp_agent.domain.faults import (
+    CLOSED_TICKET_STATES,
+    FaultTask,
+    FaultType,
+    OpenReport,
+    ReportDraft,
+    SavedReport,
+    TicketStatus,
+)
+from camp_agent.domain.guest_status import QuickPick
+from camp_agent.domain.routing import Category, Route, Scope, TaskKind, TaskState, Team, Urgency
+from camp_agent.domain.table_bookings import TableBooking, TableTask
+from camp_agent.graph.triage import (
     CaseSnapshot,
     LinkTarget,
+    StaleCaseError,
     StatusChange,
     StepRecord,
     TaskAnswer,
@@ -31,14 +30,12 @@ from camp_agent.graph.triage_types import (
     ValidationRecord,
     WaitingTask,
 )
-from camp_agent.guide.guide_error import GuideError
-from camp_agent.guide.guide_port import GuidePort
-from camp_agent.guide.guide_types import GuideSection
 from camp_agent.guide.markdown_guide import MarkdownGuide, parse_guide
-from camp_agent.llm.llm_error import LlmError
-from camp_agent.llm.llm_types import (
+from camp_agent.guide.port import GuideError, GuidePort, GuideSection
+from camp_agent.llm.port import (
     Classification,
     GuideAnswer,
+    LlmError,
     SameProblem,
     TableArgs,
     TableBrief,
@@ -46,13 +43,10 @@ from camp_agent.llm.llm_types import (
     TicketBrief,
     Verdict,
 )
-from camp_agent.notification.notification_types import StatusNotice
+from camp_agent.notification.port import StatusNotice
+from camp_agent.stay.port import Booking, StayContextPort, StayError
 from camp_agent.stay.seed_stays import SeedStays
-from camp_agent.stay.stay_error import StayError
-from camp_agent.stay.stay_port import StayContextPort
-from camp_agent.stay.stay_types import Booking
-from camp_agent.ticket.ticket_error import TicketError
-from camp_agent.ticket.ticket_types import TicketKey, TicketReceipt, TicketRequest
+from camp_agent.ticket.port import TicketError, TicketKey, TicketReceipt, TicketRequest
 
 CAMP_TZ = ZoneInfo("Europe/London")
 QUESTION = Classification(

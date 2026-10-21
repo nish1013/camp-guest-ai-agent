@@ -3,10 +3,11 @@ from pathlib import Path
 
 import anyio
 
-from camp_agent.guide.guide_error import GuideError
-from camp_agent.guide.guide_types import GuideSection
+from camp_agent.guide.port import GuideError, GuideSection
 
 _SECTION_START = re.compile(r"^## ", re.MULTILINE)
+
+
 _HEADING = re.compile(r"(?P<title>.+?) \{#(?P<id>[a-z0-9-]+)\}")
 
 

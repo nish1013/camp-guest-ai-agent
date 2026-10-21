@@ -3,9 +3,8 @@ from pathlib import Path
 import pytest
 
 from camp_agent.config import Settings
-from camp_agent.guide.guide_error import GuideError
-from camp_agent.guide.guide_types import GuideSection
 from camp_agent.guide.markdown_guide import MarkdownGuide
+from camp_agent.guide.port import GuideError, GuideSection
 
 pytestmark = pytest.mark.anyio
 

@@ -1,11 +1,10 @@
 import pytest
 
-from camp_agent.domain.case_state import CaseState, StateReason
-from camp_agent.domain.quick_pick import QuickPick
-from camp_agent.domain.route_guard import Category, Route, TaskKind, TaskState
-from camp_agent.domain.urgency import Urgency
-from camp_agent.graph.triage_graph import PendingMessage
-from camp_agent.llm.llm_prompts import classify_input
+from camp_agent.domain.cases import CaseState, StateReason
+from camp_agent.domain.guest_status import QuickPick
+from camp_agent.domain.routing import Category, Route, TaskKind, TaskState, Urgency
+from camp_agent.graph.triage import PendingMessage
+from camp_agent.llm.prompts import classify_input
 from tests.fakes import FakeLlm
 from tests.unit.triage_support import CASE, graph_for, new_store, proposal
 

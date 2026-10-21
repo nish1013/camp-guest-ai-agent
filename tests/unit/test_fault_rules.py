@@ -6,19 +6,18 @@ from camp_agent.domain.arg_validation import (
     check_link,
     check_ticket_args,
 )
-from camp_agent.domain.fault_flow import (
+from camp_agent.domain.faults import (
     Confirmation,
     FaultTask,
+    FaultType,
+    TicketStatus,
     after_answer,
     answered,
     next_actionable,
     split_to_confirm,
 )
-from camp_agent.domain.fault_type import FaultType
 from camp_agent.domain.guest_status import same_question, split_question
-from camp_agent.domain.route_guard import Category, TaskState
-from camp_agent.domain.ticket_status import TicketStatus
-from camp_agent.domain.urgency import Urgency
+from camp_agent.domain.routing import Category, TaskState, Urgency
 
 QUEUED = TaskState.QUEUED
 NORMAL = Urgency.NORMAL

@@ -2,8 +2,15 @@ from datetime import date
 
 import pytest
 
-from camp_agent.domain.route_guard import Category, Route, TaskKind, TaskState, guard_route
-from camp_agent.domain.scope import Scope, ScopeSource
+from camp_agent.domain.routing import (
+    Category,
+    Route,
+    Scope,
+    ScopeSource,
+    TaskKind,
+    TaskState,
+    guard_route,
+)
 
 HELD = frozenset({"refund", "compensation", "cabin_move", "safety_close_out"})
 C12 = Scope("C12", date(2026, 10, 18), date(2026, 10, 25), ScopeSource.QR)

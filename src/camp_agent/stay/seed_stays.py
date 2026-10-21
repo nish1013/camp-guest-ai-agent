@@ -6,8 +6,7 @@ from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from camp_agent.clock import Clock
 from camp_agent.domain.step_up import normalise_ref
-from camp_agent.stay.stay_error import StayError
-from camp_agent.stay.stay_types import Booking
+from camp_agent.stay.port import Booking, StayError
 
 
 class SeedStay(BaseModel):

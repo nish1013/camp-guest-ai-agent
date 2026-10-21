@@ -1,8 +1,6 @@
 import pytest
 
-from camp_agent.guide.guide_copy import copy_from_guide
-from camp_agent.guide.guide_error import GuideError
-from camp_agent.guide.guide_types import GuideSection
+from camp_agent.guide.port import GuideError, GuideSection, copy_from_guide
 from tests.fakes import demo_guide, demo_section
 
 pytestmark = pytest.mark.anyio

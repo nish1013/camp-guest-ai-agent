@@ -8,30 +8,27 @@ from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
 
-from camp_agent.domain.cabin_reports import OpenReport
-from camp_agent.domain.fault_type import FaultType
-from camp_agent.domain.route_guard import Category, Route
-from camp_agent.domain.specialist import Team
-from camp_agent.domain.urgency import Urgency
-from camp_agent.guide.guide_types import GuideSection
-from camp_agent.llm.llm_error import LlmError
-from camp_agent.llm.llm_prompts import (
-    RESTAURANT,
-    SPECIALISTS,
-    answer_input,
-    same_problem_input,
-    table_input,
-    ticket_input,
-)
-from camp_agent.llm.llm_types import (
+from camp_agent.domain.faults import FaultType, OpenReport
+from camp_agent.domain.routing import Category, Route, Team, Urgency
+from camp_agent.guide.port import GuideSection
+from camp_agent.llm.port import (
     Classification,
     GuideAnswer,
+    LlmError,
     SameProblem,
     TableArgs,
     TableBrief,
     TicketArgs,
     TicketBrief,
     Verdict,
+)
+from camp_agent.llm.prompts import (
+    RESTAURANT,
+    SPECIALISTS,
+    answer_input,
+    same_problem_input,
+    table_input,
+    ticket_input,
 )
 from camp_agent.llm.pydantic_ai_llm import PydanticAiLlm
 from camp_agent.llm.retrying_llm import RetryingLlm
