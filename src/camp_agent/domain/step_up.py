@@ -3,10 +3,9 @@ import unicodedata
 from datetime import date
 from enum import StrEnum
 
-from camp_agent.domain.case_state import CaseState
-from camp_agent.domain.case_status import CaseStatus
-from camp_agent.domain.scope import Scope, ScopeSource
-from camp_agent.stay.stay_types import Booking
+from camp_agent.domain.cases import CaseState, CaseStatus
+from camp_agent.domain.routing import Scope, ScopeSource
+from camp_agent.stay.port import Booking
 
 _REF_SEPARATORS = re.compile(r"[\s-]+")
 

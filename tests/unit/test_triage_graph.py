@@ -3,19 +3,24 @@ from datetime import date
 
 import pytest
 
-from camp_agent.domain.case_state import CaseState, StateReason
+from camp_agent.domain.cases import CaseState, StateReason
 from camp_agent.domain.guest_status import (
     CLARIFY,
     WAITING_ON_RECEPTION,
     WITH_RECEPTION,
     guest_status,
 )
-from camp_agent.domain.route_guard import Category, Route, TaskKind, TaskState
-from camp_agent.domain.scope import Scope, ScopeSource
-from camp_agent.domain.urgency import Urgency
-from camp_agent.graph.triage_graph import BatchOutcome, PendingMessage, next_batch
-from camp_agent.graph.triage_types import StepRecord
-from camp_agent.llm.llm_types import Verdict
+from camp_agent.domain.routing import (
+    Category,
+    Route,
+    Scope,
+    ScopeSource,
+    TaskKind,
+    TaskState,
+    Urgency,
+)
+from camp_agent.graph.triage import BatchOutcome, PendingMessage, StepRecord, next_batch
+from camp_agent.llm.port import Verdict
 from tests.fakes import FakeLlm, InMemoryTriageStore, oct_19
 from tests.unit.triage_support import (
     C12,

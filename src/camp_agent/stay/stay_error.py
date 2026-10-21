@@ -1,2 +1,0 @@
-class StayError(Exception):
-    pass

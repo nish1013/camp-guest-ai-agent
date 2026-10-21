@@ -3,20 +3,12 @@ from datetime import UTC, date, datetime, time
 from pydantic_evals import Case, Dataset
 from pydantic_evals.evaluators import EqualsExpected
 
-from camp_agent.domain.cabin_reports import OpenReport
 from camp_agent.domain.citation_check import CheckedAnswer
-from camp_agent.domain.fault_type import FaultType
-from camp_agent.domain.quick_pick import QuickPick
-from camp_agent.domain.route_guard import TaskKind
-from camp_agent.domain.specialist import Team
-from camp_agent.domain.table_flow import TableBooking
-from camp_agent.llm.llm_types import (
-    Classification,
-    SameProblem,
-    TableArgs,
-    TicketArgs,
-    Verdict,
-)
+from camp_agent.domain.faults import FaultType, OpenReport
+from camp_agent.domain.guest_status import QuickPick
+from camp_agent.domain.routing import TaskKind, Team
+from camp_agent.domain.table_bookings import TableBooking
+from camp_agent.llm.port import Classification, SameProblem, TableArgs, TicketArgs, Verdict
 from tests.evals.eval_checks import Cited, GuardedKind, IntentCount, TableArgsPass, TicketArgsPass
 from tests.evals.eval_constants import C12
 from tests.evals.eval_types import ClassifyInput, GraphOutcome, SameProblemInput, TicketInput

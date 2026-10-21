@@ -2,7 +2,7 @@ from datetime import date, time
 
 import pytest
 
-from camp_agent.llm.llm_types import TableArgs, TicketArgs, Verdict
+from camp_agent.llm.port import TableArgs, TicketArgs, Verdict
 from tests.evals.eval_datasets import CROSS_CABIN_FAULT, CROSS_CABIN_TABLE, SAFETY_SPAM, SPAM
 from tests.evals.eval_suite import EvalSuite, failing_cases
 from tests.fakes import FakeLlm

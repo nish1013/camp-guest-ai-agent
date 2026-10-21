@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 NO_INFORMATION = "I don't have that information."
+
+
 GUIDE_DOWN = "I can't check the guide right now."
 
 

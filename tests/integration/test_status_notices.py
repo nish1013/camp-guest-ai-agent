@@ -6,10 +6,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from camp_agent.domain.route_guard import Category, Route
-from camp_agent.domain.urgency import Urgency
-from camp_agent.intake.apply_ticket_status import ApplyTicketStatus
-from camp_agent.llm.llm_types import Classification
+from camp_agent.domain.routing import Category, Route, Urgency
+from camp_agent.intake.tickets import ApplyTicketStatus
+from camp_agent.llm.port import Classification
 from camp_agent.qr.qr_token import QrTokens
 from tests.fakes import FakeClock, FakeLlm, RecordingNotifications
 from tests.integration.intake_support import SECRET, rows, send

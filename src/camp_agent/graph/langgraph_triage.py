@@ -5,19 +5,21 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import RetryPolicy
 
 from camp_agent.clock import Clock
-from camp_agent.domain.audit_entry import AuditEntry, AuditValue
-from camp_agent.domain.case_activity import in_action, triages_follow_up
-from camp_agent.domain.case_state import CaseState, StateReason
-from camp_agent.domain.fault_type import FaultType
-from camp_agent.domain.route_guard import Route, TaskKind, TaskState, guard_route
+from camp_agent.domain.cases import (
+    AuditEntry,
+    AuditValue,
+    CaseState,
+    StateReason,
+    in_action,
+    triages_follow_up,
+)
+from camp_agent.domain.faults import FaultType
+from camp_agent.domain.routing import Route, TaskKind, TaskState, Urgency, guard_route
 from camp_agent.domain.step_up import resumes_waiting
-from camp_agent.domain.urgency import Urgency
 from camp_agent.graph.fault_desk import FaultDesk
 from camp_agent.graph.guide_answerer import GuideAnswerer
-from camp_agent.graph.stale_case_error import StaleCaseError
 from camp_agent.graph.table_desk import TableDesk
-from camp_agent.graph.triage_graph import BatchOutcome, PendingMessage
-from camp_agent.graph.triage_state import (
+from camp_agent.graph.triage import (
     ANSWER,
     BOOKING,
     CLARIFY,
@@ -34,27 +36,30 @@ from camp_agent.graph.triage_state import (
     SPECIALIST,
     SPLIT,
     VERIFY,
-    TriageState,
-    TriageUpdate,
-    start_state,
-)
-from camp_agent.graph.triage_store import TriageStore
-from camp_agent.graph.triage_types import (
+    BatchOutcome,
+    PendingMessage,
+    StaleCaseError,
     StatusChange,
     StepRecord,
     TaskAnswer,
     TaskDraft,
     TaskTransition,
     TriagePolicy,
+    TriageState,
+    TriageStore,
+    TriageUpdate,
     WaitingTask,
+    start_state,
 )
-from camp_agent.llm.llm_error import LlmError
-from camp_agent.llm.llm_port import LlmPort
-from camp_agent.llm.llm_types import Verdict
-from camp_agent.ticket.ticket_port import TicketPort
+from camp_agent.llm.port import LlmError, LlmPort, Verdict
+from camp_agent.ticket.port import TicketPort
 
 _AFTER_VERDICT = {Verdict.GENUINE: SPLIT, Verdict.SPAM: PARK, Verdict.UNCLEAR: CLARIFY}
+
+
 _RECURSION_LIMIT = 1000
+
+
 # A step-up or staff action changed the case between a node's read and its write: read again.
 _STALE_RETRY = RetryPolicy(initial_interval=0.01, max_attempts=5, retry_on=StaleCaseError)
 

@@ -4,9 +4,9 @@ from pydantic_evals.evaluators import EvaluationReason, Evaluator, EvaluatorCont
 
 from camp_agent.domain.arg_validation import ValidationOutcome, check_table_args, check_ticket_args
 from camp_agent.domain.citation_check import AnswerOutcome, CheckedAnswer
-from camp_agent.domain.route_guard import TaskKind, guard_route
-from camp_agent.domain.table_flow import TableBooking
-from camp_agent.llm.llm_types import Classification, TableArgs, TicketArgs
+from camp_agent.domain.routing import TaskKind, guard_route
+from camp_agent.domain.table_bookings import TableBooking
+from camp_agent.llm.port import Classification, TableArgs, TicketArgs
 from tests.evals.eval_constants import C12, HELD_CATEGORIES, NOW, TODAY
 from tests.evals.eval_types import ClassifyInput, TicketInput
 

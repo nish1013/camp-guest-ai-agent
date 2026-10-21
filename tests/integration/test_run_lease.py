@@ -5,10 +5,10 @@ import anyio
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from camp_agent.db.case_repository import CaseRepository
-from camp_agent.db.message_repository import MessageRepository
-from camp_agent.graph.triage_graph import BatchOutcome, PendingMessage
-from camp_agent.intake.run_coordinator import RunCoordinator
+from camp_agent.db.cases import CaseRepository
+from camp_agent.db.messages import MessageRepository
+from camp_agent.graph.triage import BatchOutcome, PendingMessage
+from camp_agent.intake.runs import RunCoordinator
 from tests.fakes import oct_19
 
 pytestmark = pytest.mark.anyio

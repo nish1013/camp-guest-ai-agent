@@ -3,9 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from camp_agent.domain.case_state import CaseState, StateReason
-from camp_agent.domain.case_status import CaseStatus
-from camp_agent.domain.desk_hours import DeskHours
+from camp_agent.domain.cases import CaseState, CaseStatus, DeskHours, StateReason
+from camp_agent.domain.faults import TicketStatus
 from camp_agent.domain.guest_status import (
     CLARIFY,
     CLOSED,
@@ -17,9 +16,7 @@ from camp_agent.domain.guest_status import (
     guest_status,
     ticket_status,
 )
-from camp_agent.domain.route_guard import TaskState
-from camp_agent.domain.specialist import Team
-from camp_agent.domain.ticket_status import TicketStatus
+from camp_agent.domain.routing import TaskState, Team
 from tests.fakes import CAMP_TZ
 
 DESK = DeskHours(time(8), time(22), CAMP_TZ)

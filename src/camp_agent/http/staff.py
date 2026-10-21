@@ -1,3 +1,4 @@
+import secrets
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Literal
@@ -8,36 +9,55 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from camp_agent.config import Settings
-from camp_agent.domain.route_guard import Category
-from camp_agent.domain.ticket_status import TicketStatus
-from camp_agent.domain.urgency import Urgency
-from camp_agent.http.staff_auth import (
-    LOGIN_PATH,
-    STAFF_SESSION_KEY,
-    credentials_match,
-    require_staff,
-)
-from camp_agent.intake.apply_ticket_status import ApplyTicketStatus
-from camp_agent.intake.run_coordinator import RunCoordinator
-from camp_agent.staff.list_queue import ListQueue
-from camp_agent.staff.resolve_as_human import ResolveAsHuman
-from camp_agent.staff.resolve_error import ResolveError
-from camp_agent.staff.restore_case import RestoreCase
-from camp_agent.staff.restore_error import RestoreError
-from camp_agent.staff.set_booking_status import SetBookingStatus
-from camp_agent.staff.show_case import ShowCase
-from camp_agent.staff.staff_conflict_error import StaffConflictError
-from camp_agent.staff.staff_types import BookingDecision, ResolveCommand, RestoreCommand
-from camp_agent.stay.stay_error import StayError
-from camp_agent.ticket.demo_ticket_status import DemoTicketStatus
+from camp_agent.domain.faults import TicketStatus
+from camp_agent.domain.routing import Category, Urgency
+from camp_agent.intake.runs import RunCoordinator
+from camp_agent.intake.tickets import ApplyTicketStatus
+from camp_agent.staff.bookings import BookingDecision, SetBookingStatus
+from camp_agent.staff.case_lock import StaffConflictError
+from camp_agent.staff.queue import ListQueue, ShowCase
+from camp_agent.staff.resolve import ResolveAsHuman, ResolveCommand, ResolveError
+from camp_agent.staff.restore import RestoreCase, RestoreCommand, RestoreError
+from camp_agent.stay.port import StayError
+from camp_agent.ticket.demo_tickets import DemoTicketStatus
+
+STAFF_SESSION_KEY = "staff"
+
+
+LOGIN_PATH = "/staff/login"
+
+
+def credentials_match(settings: Settings, user: str, password: str) -> bool:
+    user_ok = secrets.compare_digest(user.encode(), settings.staff_user.encode())
+    expected = settings.staff_password.get_secret_value().encode()
+    password_ok = secrets.compare_digest(password.encode(), expected)
+    return user_ok and password_ok
+
+
+def require_staff(request: Request) -> None:
+    # Open intake stops at the staff view and its approvals (D9).
+    if not request.session.get(STAFF_SESSION_KEY):
+        raise HTTPException(status.HTTP_303_SEE_OTHER, headers={"Location": LOGIN_PATH})
+
 
 QUEUE_PATH = "/staff/cases"
+
+
 LOGIN_REFUSED = "Wrong user name or password."
+
+
 CASE_CHANGED = "This case changed since you opened it. It has been reloaded."
+
+
 BOOKINGS_DOWN = "The booking system cannot be reached. Try again shortly."
 
+
 Version = Annotated[int, Form(ge=0)]
+
+
 BookingRef = Annotated[str, Form(max_length=40)]
+
+
 StepId = Annotated[str | None, Form(pattern=r"^m\d+/(t\d+|emergency)$", max_length=40)]
 
 
@@ -56,7 +76,11 @@ class StaffServices:
 
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+
+
 router = APIRouter(prefix="/staff")
+
+
 guarded = APIRouter(dependencies=[Depends(require_staff)])
 
 

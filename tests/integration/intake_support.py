@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from httpx2 import Response
 from sqlalchemy import Engine, text
 
-from camp_agent.graph.triage_graph import BatchOutcome, PendingMessage
+from camp_agent.graph.triage import BatchOutcome, PendingMessage
 
 SECRET = "test-secret"
 

@@ -5,10 +5,9 @@ from fastapi.testclient import TestClient
 from httpx2 import Response
 from sqlalchemy import Engine, text
 
-from camp_agent.domain.fault_type import FaultType
-from camp_agent.domain.route_guard import Category, Route
-from camp_agent.domain.urgency import Urgency
-from camp_agent.llm.llm_types import Classification, GuideAnswer, Verdict
+from camp_agent.domain.faults import FaultType
+from camp_agent.domain.routing import Category, Route, Urgency
+from camp_agent.llm.port import Classification, GuideAnswer, Verdict
 from tests.fakes import FakeClock, FakeLlm, SwitchableStays
 from tests.integration.intake_support import audit, rows, send
 from tests.integration.staff_support import login

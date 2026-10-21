@@ -7,43 +7,41 @@ from camp_agent.domain.arg_validation import (
     check_link,
     check_ticket_args,
 )
-from camp_agent.domain.audit_entry import AuditEntry, AuditValue
-from camp_agent.domain.cabin_reports import ReportDraft
-from camp_agent.domain.case_state import CaseState, StateReason
-from camp_agent.domain.fault_flow import FaultTask, next_actionable, split_to_confirm
-from camp_agent.domain.route_guard import TaskState
-from camp_agent.domain.specialist import specialist_for
-from camp_agent.graph.task_steps import hold_task, required_scope
-from camp_agent.graph.triage_state import (
+from camp_agent.domain.cases import AuditEntry, AuditValue, CaseState, StateReason
+from camp_agent.domain.faults import FaultTask, ReportDraft, next_actionable, split_to_confirm
+from camp_agent.domain.routing import TaskState, specialist_for
+from camp_agent.graph.triage import (
     CONFIRM_SPLIT,
     DISPATCH,
     LINK,
     REPORT,
     SAME,
     SPECIALIST,
-    TriageState,
-    TriageUpdate,
-)
-from camp_agent.graph.triage_store import TriageStore
-from camp_agent.graph.triage_types import (
     CaseSnapshot,
     StepRecord,
     TaskHold,
     TaskTransition,
     TicketLink,
+    TriageState,
+    TriageStore,
+    TriageUpdate,
     ValidationRecord,
+    hold_task,
+    required_scope,
 )
-from camp_agent.llm.llm_error import LlmError
-from camp_agent.llm.llm_port import LlmPort
-from camp_agent.llm.llm_types import TicketBrief
-from camp_agent.ticket.ticket_error import TicketError
-from camp_agent.ticket.ticket_port import TicketPort
-from camp_agent.ticket.ticket_types import TicketKey, TicketReceipt, TicketRequest
+from camp_agent.llm.port import LlmError, LlmPort, TicketBrief
+from camp_agent.ticket.port import TicketError, TicketKey, TicketPort, TicketReceipt, TicketRequest
 
 VALIDATE = "validate"
+
+
 TICKET = "ticket"
+
+
 # One draft and one reprompt, then a person decides (D15).
 _MAX_DRAFTS = 2
+
+
 _STEP_FOR = {
     TaskState.QUEUED: REPORT,
     TaskState.SPLIT_CONFIRMED: REPORT,

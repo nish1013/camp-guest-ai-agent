@@ -2,9 +2,8 @@ from datetime import date
 
 import pytest
 
-from camp_agent.domain.scope import Scope, ScopeSource
-from camp_agent.qr.qr_link import demo_link
-from camp_agent.qr.qr_token import QrOutcome, QrTokens
+from camp_agent.domain.routing import Scope, ScopeSource
+from camp_agent.qr.qr_token import QrOutcome, QrTokens, demo_link
 
 TOKENS = QrTokens("test-secret")
 C12 = TOKENS.issue("C12", date(2026, 10, 18), date(2026, 10, 25))

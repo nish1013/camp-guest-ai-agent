@@ -11,16 +11,16 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from camp_agent.app import create_app
 from camp_agent.config import Settings
-from camp_agent.db.pg_triage_store import PgTriageStore
-from camp_agent.db.task_repository import TaskRepository
-from camp_agent.db.ticket_lock import lock_ticket, unlock_ticket
-from camp_agent.domain.audit_entry import AuditEntry
-from camp_agent.domain.route_guard import TaskState
-from camp_agent.domain.ticket_status import TicketStatus
-from camp_agent.graph.triage_types import StepRecord, TaskTransition, TicketLink
-from camp_agent.intake.apply_ticket_status import ApplyTicketStatus
-from camp_agent.ticket.demo_ticket_status import DemoTicketStatus
-from camp_agent.ticket.ticket_types import TicketStatusChanged
+from camp_agent.db.tasks import TaskRepository
+from camp_agent.db.tickets import lock_ticket, unlock_ticket
+from camp_agent.db.triage_store import PgTriageStore
+from camp_agent.domain.cases import AuditEntry
+from camp_agent.domain.faults import TicketStatus
+from camp_agent.domain.routing import TaskState
+from camp_agent.graph.triage import StepRecord, TaskTransition, TicketLink
+from camp_agent.intake.tickets import ApplyTicketStatus
+from camp_agent.ticket.demo_tickets import DemoTicketStatus
+from camp_agent.ticket.port import TicketStatusChanged
 from tests.fakes import FakeClock, SwitchableGuide, SwitchableStays
 from tests.integration.intake_support import SECRET, RecordingGraph, rows
 from tests.integration.staff_support import login

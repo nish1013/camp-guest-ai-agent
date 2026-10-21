@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 
 from camp_agent.domain.step_up import BookingCheck, check_booking, limit_reached, normalise_ref
-from camp_agent.stay.stay_types import Booking
+from camp_agent.stay.port import Booking
 
 MULLER = Booking("BK-48213", "Müller", "C12", date(2026, 10, 18), date(2026, 10, 25))
 TODAY = date(2026, 10, 19)

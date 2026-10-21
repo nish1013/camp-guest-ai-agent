@@ -1,2 +1,0 @@
-class StaleCaseError(Exception):
-    pass

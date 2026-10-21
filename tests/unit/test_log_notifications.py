@@ -4,7 +4,7 @@ import logging
 import pytest
 
 from camp_agent.notification.log_notifications import LogNotifications
-from camp_agent.notification.notification_types import StatusNotice
+from camp_agent.notification.port import StatusNotice
 
 pytestmark = pytest.mark.anyio
 

@@ -1,6 +1,6 @@
 import pytest
 
-from camp_agent.domain.safety_rule import SafetyRule
+from camp_agent.domain.safety import SafetyRule
 
 RULE = SafetyRule(["fire", "gas", "smoke", "flood", "medical", "injury"])
 

@@ -2,27 +2,32 @@ from langgraph.graph import END
 
 from camp_agent.clock import Clock
 from camp_agent.domain.arg_validation import check_table_args
-from camp_agent.domain.audit_entry import AuditEntry, AuditValue
-from camp_agent.domain.case_state import CaseState, StateReason
-from camp_agent.domain.route_guard import TaskState
-from camp_agent.domain.table_flow import TableTask, next_to_book
-from camp_agent.graph.task_steps import hold_task, required_scope
-from camp_agent.graph.triage_state import BOOKING, DISPATCH, TriageState, TriageUpdate
-from camp_agent.graph.triage_store import TriageStore
-from camp_agent.graph.triage_types import (
+from camp_agent.domain.cases import AuditEntry, AuditValue, CaseState, StateReason
+from camp_agent.domain.routing import TaskState
+from camp_agent.domain.table_bookings import TableTask, next_to_book
+from camp_agent.graph.triage import (
+    BOOKING,
+    DISPATCH,
     CaseSnapshot,
     StepRecord,
     TaskHold,
     TaskTransition,
     TriagePolicy,
+    TriageState,
+    TriageStore,
+    TriageUpdate,
     ValidationRecord,
+    hold_task,
+    required_scope,
 )
-from camp_agent.llm.llm_error import LlmError
-from camp_agent.llm.llm_port import LlmPort
-from camp_agent.llm.llm_types import TableBrief
+from camp_agent.llm.port import LlmError, LlmPort, TableBrief
 
 VALIDATE = "validate"
+
+
 RESTAURANT = "restaurant"
+
+
 # One draft and one reprompt, then a person decides (D15).
 _MAX_DRAFTS = 2
 

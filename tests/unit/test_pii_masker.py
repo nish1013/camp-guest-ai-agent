@@ -1,6 +1,6 @@
 import pytest
 
-from camp_agent.domain.pii_masker import mask_pii
+from camp_agent.domain.safety import mask_pii
 
 
 @pytest.mark.parametrize(

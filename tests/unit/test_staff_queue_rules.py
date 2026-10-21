@@ -2,9 +2,8 @@ from datetime import UTC, datetime, time, timedelta
 
 import pytest
 
-from camp_agent.domain.desk_hours import DeskHours, is_overdue
-from camp_agent.domain.queue_order import queue_rank
-from camp_agent.domain.urgency import Urgency
+from camp_agent.domain.cases import DeskHours, is_overdue, queue_rank
+from camp_agent.domain.routing import Urgency
 from tests.fakes import CAMP_TZ
 
 DESK = DeskHours(time(8), time(22), CAMP_TZ)

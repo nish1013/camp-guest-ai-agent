@@ -2,11 +2,17 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from camp_agent.domain.case_closure import TaskProgress, finished, reopens, settled
-from camp_agent.domain.case_state import CaseState, StateReason
-from camp_agent.domain.case_status import CaseStatus
-from camp_agent.domain.route_guard import TaskState
-from camp_agent.domain.ticket_status import TicketStatus
+from camp_agent.domain.cases import (
+    CaseState,
+    CaseStatus,
+    StateReason,
+    TaskProgress,
+    finished,
+    reopens,
+    settled,
+)
+from camp_agent.domain.faults import TicketStatus
+from camp_agent.domain.routing import TaskState
 
 NOW = datetime(2026, 10, 19, 14, tzinfo=UTC)
 DAY = timedelta(hours=24)

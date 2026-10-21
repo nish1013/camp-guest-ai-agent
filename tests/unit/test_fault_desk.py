@@ -3,18 +3,12 @@ from dataclasses import replace
 import pytest
 
 from camp_agent.domain.arg_validation import ValidationOutcome
-from camp_agent.domain.audit_entry import AuditEntry
-from camp_agent.domain.cabin_reports import ReportDraft
-from camp_agent.domain.case_state import CaseState, StateReason
-from camp_agent.domain.fault_type import FaultType
+from camp_agent.domain.cases import AuditEntry, CaseState, StateReason
+from camp_agent.domain.faults import FaultType, ReportDraft, TicketStatus
 from camp_agent.domain.guest_status import WITH_RECEPTION, guest_status
-from camp_agent.domain.route_guard import Category, Route, TaskState
-from camp_agent.domain.scope import ScopeSource
-from camp_agent.domain.specialist import Team
-from camp_agent.domain.ticket_status import TicketStatus
-from camp_agent.domain.urgency import Urgency
-from camp_agent.graph.triage_types import StepRecord, TaskTransition, TicketLink
-from camp_agent.llm.llm_types import Classification, TicketArgs
+from camp_agent.domain.routing import Category, Route, ScopeSource, TaskState, Team, Urgency
+from camp_agent.graph.triage import StepRecord, TaskTransition, TicketLink
+from camp_agent.llm.port import Classification, TicketArgs
 from tests.fakes import FakeLlm, FakeTickets, InMemoryTriageStore, oct_19
 from tests.unit.triage_support import C12, CASE, RECEPTION, graph_for, new_store, steps, triage
 

@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from camp_agent.intake.rate_limiter import SlidingWindowLimiter
+from camp_agent.intake.messages import SlidingWindowLimiter
 
 T0 = datetime(2026, 10, 19, 14, tzinfo=UTC)
 WINDOW = timedelta(minutes=10)

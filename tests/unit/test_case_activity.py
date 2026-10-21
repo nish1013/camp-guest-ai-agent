@@ -2,13 +2,17 @@ from dataclasses import replace
 
 import pytest
 
-from camp_agent.domain.case_activity import asks_guest, in_action, triages_follow_up
-from camp_agent.domain.case_state import CaseState, StateReason
-from camp_agent.domain.case_status import CaseStatus
-from camp_agent.domain.fault_type import FaultType
-from camp_agent.domain.route_guard import Category, Route, TaskState
-from camp_agent.domain.urgency import Urgency
-from camp_agent.llm.llm_types import Classification, Verdict
+from camp_agent.domain.cases import (
+    CaseState,
+    CaseStatus,
+    StateReason,
+    asks_guest,
+    in_action,
+    triages_follow_up,
+)
+from camp_agent.domain.faults import FaultType
+from camp_agent.domain.routing import Category, Route, TaskState, Urgency
+from camp_agent.llm.port import Classification, Verdict
 from tests.fakes import FakeLlm, InMemoryTriageStore
 from tests.unit.triage_support import CASE, steps, triage
 

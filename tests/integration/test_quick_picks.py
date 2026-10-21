@@ -6,9 +6,8 @@ from fastapi.testclient import TestClient
 from httpx2 import Response
 from sqlalchemy import Engine
 
-from camp_agent.domain.route_guard import Category, Route
-from camp_agent.domain.urgency import Urgency
-from camp_agent.llm.llm_types import Classification
+from camp_agent.domain.routing import Category, Route, Urgency
+from camp_agent.llm.port import Classification
 from camp_agent.qr.qr_token import QrTokens
 from tests.fakes import FakeLlm
 from tests.integration.intake_support import SECRET, count, rows

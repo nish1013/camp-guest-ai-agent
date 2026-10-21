@@ -4,13 +4,19 @@ from datetime import date, time
 import pytest
 
 from camp_agent.domain.arg_validation import ValidationOutcome
-from camp_agent.domain.case_state import CaseState, StateReason
+from camp_agent.domain.cases import CaseState, StateReason
 from camp_agent.domain.guest_status import RECEIVED, WAITING_ON_RECEPTION, guest_status
-from camp_agent.domain.route_guard import Category, Route, TaskKind, TaskState
-from camp_agent.domain.scope import Scope, ScopeSource
-from camp_agent.domain.table_flow import TableBooking
-from camp_agent.domain.urgency import Urgency
-from camp_agent.llm.llm_types import GuideAnswer, TableArgs, TableBrief
+from camp_agent.domain.routing import (
+    Category,
+    Route,
+    Scope,
+    ScopeSource,
+    TaskKind,
+    TaskState,
+    Urgency,
+)
+from camp_agent.domain.table_bookings import TableBooking
+from camp_agent.llm.port import GuideAnswer, TableArgs, TableBrief
 from tests.fakes import FakeLlm, InMemoryTriageStore, table_args
 from tests.unit.triage_support import (
     C12,

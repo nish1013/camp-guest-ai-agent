@@ -1,23 +1,35 @@
 from dataclasses import dataclass
+from pathlib import Path
 
+from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 
 from camp_agent.clock import Clock
-from camp_agent.db.answered_question import AnsweredQuestion
-from camp_agent.db.case_record import CaseRecord
-from camp_agent.domain.desk_hours import DeskHours
-from camp_agent.domain.guest_status import guest_status
-from camp_agent.guide.guide_types import GuideCopy
-from camp_agent.http.page_templates import templates
+from camp_agent.db.cases import CaseRecord
+from camp_agent.db.tasks import AnsweredQuestion
+from camp_agent.domain.cases import DeskHours
+from camp_agent.domain.guest_status import QuickPick, guest_status
+from camp_agent.guide.port import GuideCopy
 from camp_agent.http.status_events import event_id
-from camp_agent.intake.answer_types import BookingLine, CaseFaults
-from camp_agent.intake.list_answers import ListAnswers
-from camp_agent.intake.list_bookings import ListBookings
-from camp_agent.intake.list_declined import ListDeclined
-from camp_agent.intake.list_faults import ListFaults
-from camp_agent.intake.step_up_form import StepUpForm
+from camp_agent.intake.case_view import (
+    BookingLine,
+    CaseFaults,
+    ListAnswers,
+    ListBookings,
+    ListDeclined,
+    ListFaults,
+)
+from camp_agent.intake.step_up import StepUpForm
+
+templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+
+
+templates.env.globals["picks"] = list(QuickPick)
+
 
 STATUS = "status"
+
+
 ACTIONS = "actions"
 
 

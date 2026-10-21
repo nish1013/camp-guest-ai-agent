@@ -1,34 +1,76 @@
 from datetime import date, time
+from enum import StrEnum
 
-from camp_agent.domain.case_state import CaseState, StateReason
-from camp_agent.domain.case_status import CaseStatus
-from camp_agent.domain.fault_type import FaultType
-from camp_agent.domain.route_guard import TaskState
-from camp_agent.domain.specialist import Team
-from camp_agent.domain.ticket_status import TicketStatus
+from camp_agent.domain.cases import CaseState, CaseStatus, StateReason
+from camp_agent.domain.faults import FaultType, TicketStatus
+from camp_agent.domain.routing import TaskState, Team
+
+
+class QuickPick(StrEnum):
+    MAINTENANCE = "maintenance"
+    CLEANING = "cleaning"
+    RESTAURANT = "restaurant"
+    QUESTION = "question"
+    RECEPTION = "reception"
+
+    @property
+    def label(self) -> str:
+        return self.value.capitalize()
+
 
 RECEIVED = "Received"
+
+
 CLARIFY = "Could you tell us a bit more about what you need?"
+
+
 WAITING_ON_RECEPTION = "Waiting on reception"
+
+
 WITH_RECEPTION = "With reception"
+
+
 BOOKING_FOUND = "Thanks, we found your booking."
+
+
 NO_BOOKING_MATCH = "We could not find a booking with those details."
+
+
 BOOKINGS_DOWN = "We cannot check bookings right now."
+
+
 NOT_VERIFIED = "We could not confirm your booking."
+
+
 WAITING_FOR_RESTAURANT = "Waiting for the restaurant to confirm"
+
+
 RESTAURANT_DECLINED = "The restaurant could not take this booking."
+
+
 CLOSED = "Closed"
+
+
 RECEPTION_OPENS = "Reception opens at {:%H:%M}."
+
+
 LOGGED = {
     Team.MAINTENANCE: "Logged with maintenance",
     Team.HOUSEKEEPING: "Logged with housekeeping",
 }
+
+
 WORKING = {
     Team.MAINTENANCE: "Maintenance is working on it",
     Team.HOUSEKEEPING: "Housekeeping is working on it",
 }
+
+
 TICKET_DONE = "Done"
+
+
 TICKET_CANCELLED = "Cancelled"
+
 
 _HELD: dict[StateReason | None, str] = {
     StateReason.MONEY: WAITING_ON_RECEPTION,

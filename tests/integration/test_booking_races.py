@@ -10,19 +10,17 @@ from sqlalchemy import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from camp_agent.db.message_repository import MessageRepository
-from camp_agent.db.pg_locked_case import PgLockedCase
-from camp_agent.db.pg_triage_store import PgTriageStore
-from camp_agent.db.task_repository import TaskRepository
-from camp_agent.domain.audit_entry import AuditEntry
-from camp_agent.domain.route_guard import Category, Route, TaskKind, TaskState
-from camp_agent.domain.table_flow import TableBooking
-from camp_agent.domain.urgency import Urgency
+from camp_agent.db.messages import MessageRepository
+from camp_agent.db.tasks import TaskRepository
+from camp_agent.db.triage_store import PgLockedCase, PgTriageStore
+from camp_agent.domain.cases import AuditEntry
+from camp_agent.domain.routing import Category, Route, TaskKind, TaskState, Urgency
+from camp_agent.domain.table_bookings import TableBooking
 from camp_agent.graph.guide_answerer import GuideAnswerer
 from camp_agent.graph.langgraph_triage import LangGraphTriage
-from camp_agent.graph.triage_types import StepRecord, TaskDraft, TaskTransition
-from camp_agent.intake.run_coordinator import RunCoordinator
-from camp_agent.llm.llm_types import Classification
+from camp_agent.graph.triage import StepRecord, TaskDraft, TaskTransition
+from camp_agent.intake.runs import RunCoordinator
+from camp_agent.llm.port import Classification
 from camp_agent.ticket.demo_tickets import DemoTickets
 from tests.fakes import FakeLlm, demo_guide, oct_19
 from tests.integration.intake_support import audit, rows

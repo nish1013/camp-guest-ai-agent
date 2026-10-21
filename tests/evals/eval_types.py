@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
-from camp_agent.domain.cabin_reports import OpenReport
-from camp_agent.domain.quick_pick import QuickPick
-from camp_agent.domain.specialist import Team
+from camp_agent.domain.faults import OpenReport
+from camp_agent.domain.guest_status import QuickPick
+from camp_agent.domain.routing import Team
 
 
 @dataclass(frozen=True)

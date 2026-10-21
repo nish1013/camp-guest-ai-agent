@@ -1,9 +1,8 @@
 from datetime import UTC, datetime, timedelta
 
-from camp_agent.domain.case_state import CaseState, StateReason
-from camp_agent.domain.case_status import CaseStatus
+from camp_agent.domain.cases import CaseState, CaseStatus, StateReason
 from camp_agent.domain.guest_status import NOT_VERIFIED, guest_status
-from camp_agent.domain.urgency import Urgency
+from camp_agent.domain.routing import Urgency
 
 T0 = datetime(2026, 10, 19, 14, tzinfo=UTC)
 T1 = T0 + timedelta(minutes=5)
